@@ -14,9 +14,9 @@ consumer source code does not change; only manifests do.
   upstream through this commit.
 - Upstream release it descends from: `v0.7.1` (the last upstream tag; the
   merge-base is 0.7.1 plus later upstream main commits).
-- `p2panda/p2panda` main at the time of this ledger (2026-11-05):
-  `d01898bfbce6af61abcb474c7b07f75eac5fbd69`, 59 commits past the merge-base,
-  not yet taken. An intake is a separate step.
+- `p2panda/p2panda` main at the previous ledger (2026-11-05):
+  `d01898bfbce6af61abcb474c7b07f75eac5fbd69`, 59 commits past the merge-base.
+  Taken in the intake below.
 - Code differences from the merge-base to the base tag: 32 files, +1380 -125.
 
 ## Family patches over upstream (merge-base to base tag)
@@ -89,3 +89,50 @@ changes are additive where possible so iroh peers still speak upstream's
 protocols. Each intake appends its upstream revision and the commits taken or
 skipped (with the reason) to this ledger. Changes worth offering back stay
 licence-compatible and are sent upstream.
+
+## Intake 2026-11-05 (branch `intake-20261105`, version 0.9.0)
+
+Upstream revision taken: `d01898bfbce6af61abcb474c7b07f75eac5fbd69`
+(2026-11-04, "node: Make members association a Processor impl"), merged whole
+into the `p2mere-0.8.0` line: 59 upstream commits, 110 files. New merge-base is
+that commit. Versions move to 0.9.0 in every package, because the
+`p2mere-store` traits changed incompatibly (below) and `p2mere-spaces` was
+reworked; consumers implementing store traits must change.
+
+Taken:
+
+- p2panda-spaces: read-modify-write state refactor, `StateChanges`, awaitable
+  `PendingSpace` / `PendingGroup` events (`created()`, `joined()`), removed
+  space members, filtering of application messages after removal, stricter
+  key-bundle API, compact `AuthenticatedMember` encoding (a spaces wire change),
+  `AuthMessage` moved into the message module.
+- p2panda-store: every write is now an explicit `_tx` method (`insert_node_info_tx`,
+  `set_topics_tx`, `prune_entries_tx`, `associate_tx`, `remove_tx`, ...), reads
+  gain non-transactional forms, `KeySecretsStore` is `PreKeyBundlesStore`,
+  event metadata is namespaced. This is the incompatible change.
+- p2panda (high-level node): spaces and groups integrated into `Node`, a global
+  `RepairTask` / `RepairHook`, member association as a `Processor`, example
+  renames. The family does not link this crate; it is carried, not used.
+- p2panda-net: iroh 1.4.1 and iroh-gossip 0.102.0, a flaky `e2e_log_sync` fix.
+- p2panda-encryption: hpke-rs 0.8 (RUSTSEC-2026-0387).
+
+Reconciled with family patches:
+
+- Address book (`1a808d9d`, store-agnostic): kept. Upstream's actor uses
+  `tx!` on `SqliteStore`; the actor keeps calling the store through
+  `AddressBookStoreHandle`, whose `AddressBookStore` impl now carries the
+  `_tx` method names and whose backends take a permit per write (`Transacted`)
+  or none (`Direct`). Upstream's `tx!` use in the actor is declined: it binds
+  SQLite, which the carrier-neutral path (D8) must not require.
+- `LogSync` tests: upstream's rewritten `e2e_log_sync` taken; the family
+  `ReleaseTrackedStore` (shutdown release test) renamed to the `_tx` store
+  methods and its removed `get_latest_entry` dropped.
+- `p2mere-*` package names with `p2panda_*` library names, the
+  `futures-channel` `sink` fix, and per-package versions kept.
+
+Declined: nothing else. No upstream change touched sync protocol ids, ALPN
+handling or the encoding of non-spaces wire messages, so iroh peers still
+speak upstream's protocols.
+
+Tests: `test --workspace --exclude p2mere` passes (361 tests). The umbrella
+`p2mere` (`tests/api.rs`) is excluded, as before.

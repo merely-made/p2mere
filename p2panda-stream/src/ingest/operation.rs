@@ -88,6 +88,18 @@ where
         .map_err(|err| IngestError::StoreError(err.to_string()))?;
 
     if already_exists {
+        // Every operation should have it's author and log associated with the topic. This is to
+        // account for the case where a single operation is processed on multiple topics.
+        let verifying_key = operation.header.verifying_key;
+        <S as TopicStore<TP, VerifyingKey, L>>::associate_tx(store, topic, &verifying_key, log_id)
+            .await
+            .map_err(|err| IngestError::StoreError(err.to_string()))?;
+
+        store
+            .commit(permit)
+            .await
+            .map_err(|err| IngestError::StoreError(err.to_string()))?;
+
         return Ok(IngestResult::AlreadyExists);
     }
 
@@ -184,11 +196,11 @@ where
     let verifying_key = operation.header.verifying_key;
 
     store
-        .insert_operation(&operation.hash, operation, log_id)
+        .insert_operation_tx(&operation.hash, operation, log_id)
         .await
         .map_err(|err| IngestError::StoreError(err.to_string()))?;
 
-    <S as TopicStore<TP, VerifyingKey, L>>::associate(store, topic, &verifying_key, log_id)
+    <S as TopicStore<TP, VerifyingKey, L>>::associate_tx(store, topic, &verifying_key, log_id)
         .await
         .map_err(|err| IngestError::StoreError(err.to_string()))?;
 
@@ -269,9 +281,9 @@ mod tests {
 
     use p2panda_core::test_utils::TestLog;
     use p2panda_core::{Hash, Header, Operation, SigningKey, Topic, VerifyingKey};
-    use p2panda_store::SqliteStore;
     use p2panda_store::logs::LogStore;
     use p2panda_store::topics::TopicStore;
+    use p2panda_store::{SqliteStore, tx_unwrap};
 
     use crate::ingest::ooo::OooBuffer;
 
@@ -350,11 +362,14 @@ mod tests {
         assert_eq!(*authors.get(&log_0.author()).unwrap(), [0]);
         assert_eq!(*authors.get(&log_1.author()).unwrap(), [1]);
 
-        let operation = store
-            .get_latest_entry(&log_0.author(), &0)
-            .await
-            .unwrap()
-            .unwrap();
+        let operation = tx_unwrap!(
+            store,
+            store
+                .get_latest_entry_tx(&log_0.author(), &0)
+                .await
+                .unwrap()
+                .unwrap()
+        );
         assert_eq!(operation.header.seq_num, 1);
 
         // Topic "cats" contains one log: 2 with four operations.
@@ -364,11 +379,14 @@ mod tests {
                 .unwrap();
         assert_eq!(*authors.get(&log_2.author()).unwrap(), [2]);
 
-        let operation = store
-            .get_latest_entry(&log_2.author(), &2)
-            .await
-            .unwrap()
-            .unwrap();
+        let operation = tx_unwrap!(
+            store,
+            store
+                .get_latest_entry_tx(&log_2.author(), &2)
+                .await
+                .unwrap()
+                .unwrap()
+        );
         assert_eq!(operation.header.seq_num, 2);
     }
 

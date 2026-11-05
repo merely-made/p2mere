@@ -10,7 +10,6 @@ use futures_util::StreamExt;
 use p2panda_core::traits::{Digest, ShortFormat};
 use p2panda_core::{Extensions, Hash, LogId};
 use p2panda_store::SqliteStore;
-use p2panda_store::spaces::SqliteSpacesStore;
 use p2panda_stream::StreamLayerExt;
 use p2panda_stream::groups::Groups;
 use p2panda_stream::hooks::{Hooks, ProcessorHooksList};
@@ -25,8 +24,10 @@ use tokio::task::LocalSet;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug, warn};
 
+use crate::egress::EgressHandle;
 use crate::processor::tasks::TaskTracker;
 use crate::processor::{Event, ProcessorStatus};
+use crate::spaces::member_processor::MembersProcessor;
 use crate::spaces::types::{AuthCapabilities, SpacesManager, SpacesProcessor};
 
 /// Number of items which can stay in the pipeline input buffer before backpressure is applied.
@@ -176,6 +177,7 @@ where
         store: SqliteStore,
         tasks: TaskTracker<Event<L, E, TP>, PipelineTaskId>,
         spaces_manager: SpacesManager,
+        egress_handle: EgressHandle,
         post_hooks: ProcessorHooksList<Event<L, E, TP>>,
     ) -> Self {
         let pipeline_id = id.into();
@@ -223,10 +225,8 @@ where
                             store.clone(),
                             pipeline_id,
                         );
-                        let spaces = {
-                            let spaces_store = SqliteSpacesStore::new(store);
-                            SpacesProcessor::<Event<L, E, TP>>::new(spaces_store, spaces_manager)
-                        };
+                        let spaces = SpacesProcessor::<Event<L, E, TP>>::new(spaces_manager);
+                        let members = MembersProcessor::new(store.clone(), egress_handle);
 
                         // Receive incoming events through mpsc channel.
                         let pipeline = ReceiverStream::new(to_pipeline_rx)
@@ -289,6 +289,17 @@ where
                                 }
                                 Err((mut event, err)) => {
                                     event.spaces = ProcessorStatus::Failed(err);
+                                    event.noop()
+                                }
+                            })
+                            .layer(members)
+                            .map(|result| match result {
+                                Ok((mut event, result)) => {
+                                    event.members = ProcessorStatus::Completed(result);
+                                    event
+                                }
+                                Err((mut event, err)) => {
+                                    event.members = ProcessorStatus::Failed(err);
                                     event.noop()
                                 }
                             })
@@ -494,6 +505,7 @@ mod tests {
     use p2panda_stream::orderer::{OrdererArgs, OrdererResult};
 
     use crate::credentials::Credentials;
+    use crate::egress::Egress;
     use crate::forge::OperationForge;
     use crate::operation::LogId;
     use crate::processor::{ProcessorStatus, TaskTracker};
@@ -510,6 +522,7 @@ mod tests {
         let tasks = TaskTracker::new();
         let credentials = Credentials::generate();
         let forge = OperationForge::new(credentials.clone(), store.clone());
+        let egress = Egress::new();
         let spaces_manager =
             spaces_manager(forge, credentials, store.clone(), Config::default()).unwrap();
 
@@ -519,6 +532,7 @@ mod tests {
             store,
             tasks,
             spaces_manager,
+            egress.handle(),
             ProcessorHooksList::new(),
         );
 
@@ -572,6 +586,7 @@ mod tests {
         let tasks = TaskTracker::new();
         let credentials = Credentials::generate();
         let forge = OperationForge::new(credentials.clone(), store.clone());
+        let egress = Egress::new();
         let spaces_manager =
             spaces_manager(forge, credentials, store.clone(), Config::default()).unwrap();
 
@@ -581,6 +596,7 @@ mod tests {
             store,
             tasks,
             spaces_manager,
+            egress.handle(),
             ProcessorHooksList::new(),
         );
 
@@ -634,6 +650,7 @@ mod tests {
         let tasks = TaskTracker::new();
         let credentials = Credentials::generate();
         let forge = OperationForge::new(credentials.clone(), store.clone());
+        let egress = Egress::new();
         let spaces_manager =
             spaces_manager(forge, credentials, store.clone(), Config::default()).unwrap();
 
@@ -643,6 +660,7 @@ mod tests {
             store,
             tasks,
             spaces_manager,
+            egress.handle(),
             ProcessorHooksList::new(),
         );
 
@@ -771,6 +789,7 @@ mod tests {
         let tasks = TaskTracker::new();
         let credentials = Credentials::generate();
         let forge = OperationForge::new(credentials.clone(), store.clone());
+        let egress = Egress::new();
         let spaces_manager =
             spaces_manager(forge, credentials, store.clone(), Config::default()).unwrap();
 
@@ -798,8 +817,14 @@ mod tests {
 
         // Create pipeline, this will spawn a thread.
         let pipeline_id = Topic::random();
-        let pipeline =
-            Pipeline::<LogId, (), Topic>::new(pipeline_id, store, tasks, spaces_manager, hooks);
+        let pipeline = Pipeline::<LogId, (), Topic>::new(
+            pipeline_id,
+            store,
+            tasks,
+            spaces_manager,
+            egress.handle(),
+            hooks,
+        );
         let pipeline_clone = pipeline.clone();
 
         // Process one item to make sure the thread is up and running.

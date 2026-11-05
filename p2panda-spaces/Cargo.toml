@@ -1,6 +1,6 @@
 [package]
 name = "p2mere-spaces"
-version = "0.8.0"
+version = "0.9.0"
 edition = "2024"
 authors = [
   "adz <x12@adz.garden>",
@@ -29,6 +29,7 @@ test_utils = [
   "p2panda-encryption/test_utils",
   "p2panda-store/macros",
   "p2panda-store/test_utils",
+  "tokio/rt",
 ]
 
 [dependencies]
@@ -40,10 +41,10 @@ petgraph = "0.8.2"
 serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["sync"] }
-tracing.workspace = true
+tracing = { workspace = true }
 
 [dev-dependencies]
 assert_matches = "1.5.0"
 p2panda-core = { workspace = true, default-features = false, features = ["test_utils"] }
 p2panda-spaces = { package = "p2mere-spaces", path = ".", features = ["test_utils"] }
-tokio = { workspace = true, features = ["rt", "macros"] }
+tokio = { workspace = true, features = ["rt", "macros", "time"] }

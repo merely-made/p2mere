@@ -39,14 +39,6 @@ impl ReleaseTrackedStore {
 impl LogStore<AnyOperation, VerifyingKey, u64, SeqNum, Hash> for ReleaseTrackedStore {
     type Error = Infallible;
 
-    async fn get_latest_entry(
-        &self,
-        _author: &VerifyingKey,
-        _log_id: &u64,
-    ) -> Result<Option<AnyOperation>, Self::Error> {
-        Ok(None)
-    }
-
     async fn get_latest_entry_tx(
         &self,
         _author: &VerifyingKey,
@@ -84,7 +76,7 @@ impl LogStore<AnyOperation, VerifyingKey, u64, SeqNum, Hash> for ReleaseTrackedS
         Ok(Box::pin(futures_util::stream::empty()))
     }
 
-    async fn prune_entries(
+    async fn prune_entries_tx(
         &self,
         _author: &VerifyingKey,
         _log_id: &u64,
@@ -97,7 +89,7 @@ impl LogStore<AnyOperation, VerifyingKey, u64, SeqNum, Hash> for ReleaseTrackedS
 impl TopicStore<Topic, VerifyingKey, u64> for ReleaseTrackedStore {
     type Error = Infallible;
 
-    async fn associate(
+    async fn associate_tx(
         &self,
         _topic: &Topic,
         _author: &VerifyingKey,
@@ -106,7 +98,7 @@ impl TopicStore<Topic, VerifyingKey, u64> for ReleaseTrackedStore {
         Ok(false)
     }
 
-    async fn remove(
+    async fn remove_tx(
         &self,
         _topic: &Topic,
         _author: &VerifyingKey,
@@ -260,84 +252,122 @@ async fn e2e_log_sync() {
 
     alice_handle.initiate_session(bob.node_id());
 
+    // NOTE: It's possible that Alice and Bob automatically start a second sync session at some
+    // point during this test. For that reason we include the expected session id in all test
+    // assertions.
+
     // Assert Alice receives the expected events.
-    let bob_id = bob.node_id();
-    let event = session_event(&mut alice_subscription, 0).await;
-    std::assert_matches!(
-        event,
-        Ok(FromSync {
-            session_id: 0,
-            remote,
-            event: Event::SyncStarted { .. },
-        }) if remote == bob_id
-    );
-    let event = session_event(&mut alice_subscription, 0).await;
-    std::assert_matches!(
-        event,
-        Ok(FromSync {
-            event: Event::OperationReceived { .. },
-            ..
-        })
-    );
-    let event = session_event(&mut alice_subscription, 0).await;
-    std::assert_matches!(
-        event,
-        Ok(FromSync {
-            event: Event::SyncFinished { .. },
-            ..
-        })
-    );
-    let event = session_event(&mut alice_subscription, 0).await;
-    std::assert_matches!(
-        event,
-        Ok(FromSync {
-            event: Event::LiveModeStarted,
-            ..
-        })
-    );
+    while let Some(event) = alice_subscription.next().await {
+        if matches!(
+            event,
+            Ok(FromSync {
+                session_id: 0,
+                event: Event::SyncStarted { .. },
+                ..
+            })
+        ) {
+            break;
+        };
+    }
+
+    while let Some(event) = alice_subscription.next().await {
+        if matches!(
+            event,
+            Ok(FromSync {
+                session_id: 0,
+                event: Event::OperationReceived { .. },
+                ..
+            })
+        ) {
+            break;
+        };
+    }
+
+    while let Some(event) = alice_subscription.next().await {
+        if matches!(
+            event,
+            Ok(FromSync {
+                session_id: 0,
+                event: Event::SyncFinished { .. },
+                ..
+            })
+        ) {
+            break;
+        };
+    }
+
+    while let Some(event) = alice_subscription.next().await {
+        if matches!(
+            event,
+            Ok(FromSync {
+                session_id: 0,
+                event: Event::LiveModeStarted { .. },
+                ..
+            })
+        ) {
+            break;
+        };
+    }
 
     // Assert Bob receives the expected events.
-    let alice_id = alice.node_id();
-    let event = session_event(&mut bob_subscription, 0).await;
-    std::assert_matches!(
-        event,
-        Ok(FromSync {
-            session_id: 0,
-            remote,
-            event: Event::SyncStarted { .. },
-        }) if remote == alice_id
-    );
-    let event = session_event(&mut bob_subscription, 0).await;
-    std::assert_matches!(
-        event,
-        Ok(FromSync {
-            event: Event::OperationReceived { .. },
-            ..
-        })
-    );
-    let event = session_event(&mut bob_subscription, 0).await;
-    std::assert_matches!(
-        event,
-        Ok(FromSync {
-            event: Event::SyncFinished { .. },
-            ..
-        })
-    );
-    let event = session_event(&mut bob_subscription, 0).await;
-    std::assert_matches!(
-        event,
-        Ok(FromSync {
-            event: Event::LiveModeStarted,
-            ..
-        })
-    );
+    while let Some(event) = bob_subscription.next().await {
+        if matches!(
+            event,
+            Ok(FromSync {
+                session_id: 0,
+                event: Event::SyncStarted { .. },
+                ..
+            })
+        ) {
+            break;
+        };
+    }
+
+    while let Some(event) = bob_subscription.next().await {
+        if matches!(
+            event,
+            Ok(FromSync {
+                session_id: 0,
+                event: Event::OperationReceived { .. },
+                ..
+            })
+        ) {
+            break;
+        };
+    }
+
+    while let Some(event) = bob_subscription.next().await {
+        if matches!(
+            event,
+            Ok(FromSync {
+                session_id: 0,
+                event: Event::SyncFinished { .. },
+                ..
+            })
+        ) {
+            break;
+        };
+    }
+
+    while let Some(event) = bob_subscription.next().await {
+        if matches!(
+            event,
+            Ok(FromSync {
+                session_id: 0,
+                event: Event::LiveModeStarted { .. },
+                ..
+            })
+        ) {
+            break;
+        };
+    }
 
     // Alice publishes a live message; require its exact signed operation id.
     let (header, _, body) = alice
         .client
         .create_operation(b"live message from Alice", log_id)
         .await;
-    let live_hash = header.hash();
+
     alice_handle
         .publish(Operation {
             hash: header.hash(),
@@ -347,35 +377,48 @@ async fn e2e_log_sync() {
         .unwrap();
 
     // Bob receives Alice's live message.
-    let event = session_event(&mut bob_subscription, 0).await;
-    std::assert_matches!(
-        event,
-        Ok(FromSync {
-            event: Event::OperationReceived { operation, .. },
-            ..
-        }) if operation.hash == live_hash
-    );
+    while let Some(event) = bob_subscription.next().await {
+        if matches!(
+            event,
+            Ok(FromSync {
+                session_id: 0,
+                event: Event::OperationReceived { .. },
+                ..
+            })
+        ) {
+            break;
+        };
+    }
 
-    // Drop Alice's stream to enforce closing live session with Bob.
-    drop(alice_handle);
+    // Close Alice's stream to enforce stopping live session with Bob.
+    alice_handle.close().await.unwrap();
 
     // Both peers observe a clean session close.
-    let event = session_event(&mut bob_subscription, 0).await;
-    std::assert_matches!(
-        event,
-        Ok(FromSync {
-            event: Event::SessionFinished { .. },
-            ..
-        })
-    );
-    let event = session_event(&mut alice_subscription, 0).await;
-    std::assert_matches!(
-        event,
-        Ok(FromSync {
-            event: Event::SessionFinished { .. },
-            ..
-        })
-    );
+    while let Some(event) = bob_subscription.next().await {
+        if matches!(
+            event,
+            Ok(FromSync {
+                session_id: 0,
+                event: Event::SessionFinished { .. },
+                ..
+            })
+        ) {
+            break;
+        };
+    }
+
+    while let Some(event) = alice_subscription.next().await {
+        if matches!(
+            event,
+            Ok(FromSync {
+                session_id: 0,
+                event: Event::SessionFinished { .. },
+                ..
+            })
+        ) {
+            break;
+        };
+    }
 }
 
 #[tokio::test]

@@ -27,8 +27,8 @@
 //! The pre-key is published in form of a key bundle in the member's own log. This log is dedicated
 //! to only these kinds of messages.
 //!
-//! Alternatively they can also be shared "offchain" in a side-channel, for example via a QR code
-//! etc. to increase privacy.
+//! Alternatively they can also be shared in a side-channel, for example via a QR code etc. to
+//! increase privacy.
 //!
 //! ## Expiring key bundles
 //!
@@ -38,36 +38,41 @@
 //! ## Space association
 //!
 //! Since this log is maintained independent of a particular space we need to explicitly associate
-//! it when the space starts to depend on the member's key bundles.
+//! it when the space starts to depend on the member's key bundles. This is handled inside the
+//! members hook.
 use std::sync::Arc;
 use std::time::Duration;
 
-use p2panda_auth::Access;
 use p2panda_core::VerifyingKey;
-use p2panda_core::traits::ShortFormat;
 use p2panda_encryption::key_bundle::{Lifetime, LongTermKeyBundle};
 use p2panda_encryption::traits::KeyBundle;
-use p2panda_net::NodeId;
-use p2panda_spaces::{ActorId, MemberId, SpaceId};
-use p2panda_store::topics::TopicStore;
-use p2panda_store::{SqliteError, SqliteStore, tx};
-use p2panda_stream::hooks::ProcessorHook;
+use p2panda_spaces::ActorId;
 use thiserror::Error;
 use tokio::sync::Notify;
 use tracing::{debug, error};
 
 use crate::egress::{DispatchConfig, EgressHandle, EventDeliveryPolicy, EventProcessingPolicy};
 use crate::spaces::Group;
-use crate::spaces::forge::member_log_id;
-use crate::spaces::types::{AuthCapabilities, InnerMember, SpacesManager, SpacesManagerError};
-use crate::streams::Event;
+use crate::spaces::types::{InnerMember, InnerPendingMember, SpacesManager, SpacesManagerError};
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Member {
     pub(crate) inner: InnerMember,
 }
 
 impl Member {
+    /// Decode a member from bytes, for example received via a QR code.
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, p2panda_spaces::member::MemberError> {
+        Ok(Self {
+            inner: InnerMember::from_bytes(bytes)?,
+        })
+    }
+
+    /// Compact byte encoding of this member, for example to share it via a QR code.
+    pub fn to_bytes(&self) -> [u8; p2panda_spaces::member::MEMBER_BYTES_LEN] {
+        self.inner.to_bytes()
+    }
+
     pub fn id(&self) -> ActorId {
         self.inner.id()
     }
@@ -92,8 +97,8 @@ impl From<Member> for ActorId {
     }
 }
 
-impl From<Member> for p2panda_spaces::member::Member {
-    fn from(value: Member) -> p2panda_spaces::member::Member {
+impl From<Member> for p2panda_spaces::member::AuthenticatedMember {
+    fn from(value: Member) -> p2panda_spaces::member::AuthenticatedMember {
         value.inner
     }
 }
@@ -156,9 +161,40 @@ impl From<GroupActor> for ActorId {
     }
 }
 
+/// Handle to a member whose key bundle might not be known yet.
+#[derive(Debug)]
+pub struct PendingMember {
+    pub(crate) inner: InnerPendingMember,
+}
+
+static_assertions::assert_impl_all!(PendingMember: Send, Sync);
+
+impl PendingMember {
+    pub fn id(&self) -> ActorId {
+        self.inner.id()
+    }
+
+    /// Wait until a valid key bundle of the member was received and return it.
+    ///
+    /// Key bundles arrive through any subscribed space the member is publishing into, or when
+    /// registering the member manually. If all known key bundles of the member expired, this waits
+    /// for a new one.
+    pub async fn registered(self) -> Result<LongTermKeyBundle, MemberError> {
+        Ok(self.inner.registered().await?)
+    }
+}
+
 #[derive(Debug, Error)]
-#[error(transparent)]
-pub struct MemberError(#[from] SpacesManagerError);
+#[allow(clippy::large_enum_variant)] // TODO: Reduce size of spaces error types.
+pub enum MemberError {
+    #[error(transparent)]
+    SpacesManager(#[from] SpacesManagerError),
+
+    /// Our own key bundle is missing or expired. This should only occur if the key bundle
+    /// background task failed or did not renew our key bundle in time.
+    #[error("no valid key bundle available for this node")]
+    KeyBundleUnavailable,
+}
 
 /// Background task to automatically publish a new member message into all currently active space
 /// streams if the associated key bundle is about to expire.
@@ -196,18 +232,12 @@ impl KeyBundleTask {
         {
             let ready_signal = ready_signal.clone();
 
-            tokio::spawn(async move {
-                let result =
-                    renew_expired_key_bundles(manager, egress_handle, ready_signal, frequency)
-                        .await;
-
-                match result {
-                    Ok(_) => debug!("key bundle management task ended"),
-                    Err(ref err) => {
-                        error!("failed task to automatically renew key bundles: {}", err);
-                    }
-                }
-            });
+            tokio::spawn(renew_expired_key_bundles(
+                manager,
+                egress_handle,
+                ready_signal,
+                frequency,
+            ));
         }
 
         // Wait until we've received a "ready" signal from the internal task. Like this we can
@@ -230,12 +260,7 @@ async fn renew_expired_key_bundles(
     egress_handle: EgressHandle,
     ready_signal: Arc<Notify>,
     frequency: Duration,
-) -> Result<(), SpacesManagerError> {
-    let config = DispatchConfig {
-        delivery: EventDeliveryPolicy::OnlySpaces,
-        processing: EventProcessingPolicy::Disabled,
-    };
-
+) {
     // The interval always fires at start, later in the given frequency. This assures that we always
     // check the current key bundle at least once on process start.
     let mut interval = tokio::time::interval(frequency);
@@ -243,123 +268,46 @@ async fn renew_expired_key_bundles(
     loop {
         interval.tick().await;
 
-        if !manager.key_bundle_expired().await? {
-            ready_signal.notify_one();
-            continue;
+        if let Err(err) = renew_expired_key_bundle(&manager, &egress_handle).await {
+            error!("failed to automatically renew key bundle: {}", err);
         }
 
-        let operation = manager.key_bundle_message().await?.into_operation();
-
-        debug!(
-            seq_num = operation.header.seq_num,
-            "key bundle non-existent or expired, automatically generate new one"
-        );
-
-        // TODO: Handle error?
-        let _ = egress_handle.dispatch_with_config(operation, &config).await;
-
+        // Signal readiness even after a failure to not block startup, we retry on the next tick.
         ready_signal.notify_one();
     }
 }
 
-/// Associate member log's by observing spaces events.
-///
-/// This helps with the following problem:
-///
-/// ```text
-/// Peer A creates space S with B, C, D
-///   A associates their member log to S
-/// Peer B joins space S
-///   B associates their member log to S
-/// Peer B wants to remove C
-///
-/// --> Peer B needs to inform A & D about the new secret but doesn't have the member log of D yet.
-/// ```
-///
-/// If Peer B would already associate D's member log when they've observed the CREATE event they
-/// would have had a chance to receive it from A. This hook makes sure that the association takes
-/// place.
-pub async fn associate_members(
-    my_node_id: VerifyingKey,
-    store: &SqliteStore,
-    events: impl IntoIterator<Item = &p2panda_spaces::Event<AuthCapabilities>>,
-) -> Option<(SpaceId, Vec<MemberId>)> {
-    for event in events {
-        let p2panda_spaces::Event::Spaces(space_event) = event else {
-            continue;
-        };
-
-        let (space_id, context) = match space_event {
-            p2panda_spaces::SpaceEvent::Created {
-                space_id, context, ..
-            } => (space_id, context),
-            p2panda_spaces::SpaceEvent::Added {
-                space_id, context, ..
-            } => (space_id, context),
-            _ => continue,
-        };
-
-        // We have to look at _current_ members instead of only the added ones since we might not
-        // process all events from the beginning, especially if we've been added later to the group.
-        let members = &context.members;
-
-        if let Err(err) = associate_members_inner(store, space_id, members).await {
-            error!(
-                my_node_id = %my_node_id.fmt_short(),
-                space_id = %space_id.fmt_short(),
-                "member association failed: {err}"
-            );
-        } else {
-            debug!(
-                my_node_id = %my_node_id.fmt_short(),
-                space_id = %space_id.fmt_short(),
-                "associate {} member logs", members.len()
-            );
-        }
+async fn renew_expired_key_bundle(
+    manager: &SpacesManager,
+    egress_handle: &EgressHandle,
+) -> Result<(), SpacesManagerError> {
+    // Avoid acquiring a write transaction when no rotation is required.
+    if !manager.is_key_bundle_rotation_due().await? {
+        return Ok(());
     }
 
-    None
-}
+    // Rotation is checked again inside the transaction, `None` means the key bundle was already
+    // rotated in the meantime.
+    let Some(message) = manager.rotate_key_bundle().await? else {
+        return Ok(());
+    };
 
-async fn associate_members_inner(
-    store: &SqliteStore,
-    space_id: &SpaceId,
-    members: &[(VerifyingKey, Access)],
-) -> Result<(), SqliteError> {
-    tx!(store, {
-        for (id, _) in members {
-            store.associate(space_id, id, &member_log_id()).await?;
-        }
-    });
+    let operation = message.into_operation();
+
+    debug!(
+        seq_num = operation.header.seq_num,
+        "key bundle non-existent or about to expire, automatically generate new one"
+    );
+
+    let config = DispatchConfig {
+        delivery: EventDeliveryPolicy::OnlySpaces,
+        processing: EventProcessingPolicy::Disabled,
+    };
+
+    // TODO: Handle error?
+    let _ = egress_handle.dispatch_with_config(operation, &config).await;
 
     Ok(())
-}
-
-/// Pipeline hook to observe spaces events and automatically associate member logs to the space when
-/// someone new was added.
-pub struct MemberAssociationHook {
-    my_node_id: NodeId,
-    store: SqliteStore,
-}
-
-impl MemberAssociationHook {
-    pub fn new(my_node_id: NodeId, store: SqliteStore) -> Self {
-        Self { my_node_id, store }
-    }
-}
-
-impl ProcessorHook<Event> for MemberAssociationHook {
-    async fn on_input(&self, input: &Event) {
-        let crate::processor::ProcessorStatus::Completed(ref result) = input.spaces else {
-            return;
-        };
-
-        let p2panda_stream::spaces::SpacesResult::Processed { events } = result else {
-            return;
-        };
-
-        associate_members(self.my_node_id, &self.store, events).await;
-    }
 }
 
 #[cfg(test)]
@@ -374,7 +322,7 @@ mod tests {
     use tokio::sync::mpsc;
 
     use crate::Credentials;
-    use crate::egress::Egress;
+    use crate::egress::{Egress, StreamType};
     use crate::forge::OperationForge;
     use crate::spaces::forge::member_log_id;
 
@@ -416,7 +364,7 @@ mod tests {
         assert_eq!(get_op_count(&store, credentials.verifying_key()).await, 1);
 
         // 3. The key bundle exists and is valid. Calling "me" doesn't generate a new one.
-        let key_bundle = spaces_manager.me().await.unwrap();
+        let key_bundle = spaces_manager.me().await.unwrap().into_valid().unwrap();
         assert!(key_bundle.verify().is_ok());
         assert_eq!(get_op_count(&store, credentials.verifying_key()).await, 1);
     }
@@ -456,7 +404,9 @@ mod tests {
         let space_id = Topic::random();
         let (import_tx, mut import_rx) = mpsc::channel(16);
 
-        egress.add_stream(space_id, true, import_tx).await;
+        egress
+            .add_stream(space_id, StreamType::Space, import_tx)
+            .await;
 
         assert!(import_rx.is_empty());
         assert_eq!(get_op_count(&store, credentials.verifying_key()).await, 1);
@@ -478,7 +428,7 @@ mod tests {
         };
         assert!(member_msg.verify().is_ok());
 
-        let expected_member_msg = spaces_manager.me().await.unwrap();
+        let expected_member_msg = spaces_manager.me().await.unwrap().into_valid().unwrap();
         // Compare key-bundles since every member instance will be generated with a new signature
         // and is therefore not equal.
         assert_eq!(expected_member_msg.key_bundle(), member_msg.key_bundle());

@@ -7,10 +7,9 @@ mod tests;
 use std::collections::BTreeMap;
 
 use async_stream::try_stream;
-use futures_util::TryStreamExt;
 use p2panda_core::cbor::encode_cbor;
 use p2panda_core::{AnyOperation, Hash, LogId, SeqNum, VerifyingKey};
-use sqlx::{QueryBuilder, query, query_as};
+use sqlx::{QueryBuilder, query, query_as, query_scalar};
 
 use crate::logs::LogStore;
 use crate::logs::sqlite::models::{LogHeightRow, LogMetaRow};
@@ -32,11 +31,9 @@ const GET_LATEST_ENTRY: &str = "
         seq_num DESC LIMIT 1
 ";
 
-const GET_LOG_ENTRIES: &str = "
+const GET_LOG_ENTRY_HASHES: &str = "
     SELECT
-        hash,
-        header,
-        body
+        hash
     FROM
         operations_v1
     WHERE
@@ -49,7 +46,18 @@ const GET_LOG_ENTRIES: &str = "
         )
         AND seq_num <= $5
     ORDER BY
-        seq_num
+        seq_num ASC
+";
+
+const GET_ENTRY: &str = "
+    SELECT
+        hash,
+        header,
+        body
+    FROM
+        operations_v1
+    WHERE
+        hash = ?
 ";
 
 impl<L> LogStore<AnyOperation, VerifyingKey, L, SeqNum, Hash> for SqliteStore
@@ -59,36 +67,6 @@ where
     type Error = SqliteError;
 
     /// Retrieve the latest entry in an author's log.
-    async fn get_latest_entry(
-        &self,
-        author: &VerifyingKey,
-        log_id: &L,
-    ) -> Result<Option<AnyOperation>, Self::Error> {
-        if let Some(latest) = query_as::<_, OperationRow>(GET_LATEST_ENTRY)
-            .bind(author.to_string())
-            .bind(
-                encode_cbor(&log_id)
-                    .map_err(|err| SqliteError::Encode("log id".to_string(), err))?,
-            )
-            .fetch_optional(&self.pool)
-            .await?
-        {
-            let operation = latest.try_into()?;
-
-            Ok(Some(operation))
-        } else {
-            Ok(None)
-        }
-    }
-
-    /// Retrieve the latest entry in an author's log.
-    ///
-    /// This variant of the method is intended to be used in situations where atomicity of database
-    /// operations is needed. It requires a transaction context with an acquired permit.
-    // TODO: In the future we may be able to remove this `_tx` variant of the query by instead
-    // requiring that API users exlicitly handle transactions themselves.
-    //
-    // See: https://github.com/p2panda/p2panda/issues/1065
     async fn get_latest_entry_tx(
         &self,
         author: &VerifyingKey,
@@ -124,13 +102,15 @@ where
         logs: &[L],
     ) -> Result<Option<BTreeMap<L, SeqNum>>, Self::Error> {
         let mut query_builder = QueryBuilder::new(
-            r#"SELECT
-                log_id,
-                MAX(seq_num) as seq_num
-            FROM
-                operations_v1
-            WHERE
-                verifying_key = "#,
+            r#"
+                SELECT
+                    log_id,
+                    MAX(seq_num) as seq_num
+                FROM
+                    operations_v1
+                WHERE
+                    verifying_key =
+            "#,
         );
 
         query_builder.push_bind(author.to_string());
@@ -209,8 +189,8 @@ where
         )))
     }
 
-    /// Stream all entries in a log after an optional starting point. This is the memory efficient
-    /// equivalent to `get_log_entries` and should only keep one entry in memory at a time.
+    /// Stream all entries in a log after an optional starting point keeping only keep one entry
+    /// in memory at a time.
     fn log_entries(
         &self,
         author: &VerifyingKey,
@@ -228,17 +208,32 @@ where
         let pool = self.pool.clone();
 
         let stream = try_stream! {
-            let mut rows = query_as::<_, OperationRow>(GET_LOG_ENTRIES)
+            // First query all ids for entries in this log range.
+            let operation_ids: Vec<String> = query_scalar(GET_LOG_ENTRY_HASHES)
                 .bind(author)
                 .bind(log_id_bytes)
                 .bind(after_is_none)
                 .bind(after_value)
                 .bind(until_value)
-                .fetch(&pool);
+                .fetch_all(&pool)
+                .await?;
 
-            while let Some(row) = rows.try_next().await? {
+            // Iterate over ids and retrieve each entry.
+            for id in operation_ids {
+                let row = query_as::<_, OperationRow>(GET_ENTRY)
+                    .bind(id)
+                    .fetch_optional(&pool)
+                    .await?;
+
+                // Ignore if the entry is missing now, it could have been deleted or pruned since
+                // the ids were retrieved.
+                let Some(row) = row else {
+                    continue;
+                };
+
                 let header = row.header.clone();
                 let operation: AnyOperation = row.try_into()?;
+
                 yield LogEntry { entry: operation, log_id: log_id.clone(), bytes: header };
             }
         };
@@ -249,31 +244,37 @@ where
     /// Prune entries from an author's log.
     ///
     /// Pruning involves deletion of the entry bodies (ie. payloads) from the database.
-    async fn prune_entries(
+    async fn prune_entries_tx(
         &self,
         author: &VerifyingKey,
         log_id: &L,
         until: &SeqNum,
     ) -> Result<u64, Self::Error> {
-        let result = query(
-            "
-            DELETE
-            FROM
-                operations_v1
-            WHERE
-                verifying_key = ?
-                AND log_id = ?
-                AND seq_num < ?
-            ",
-        )
-        .bind(author.to_string())
-        .bind(encode_cbor(&log_id).map_err(|err| SqliteError::Encode("log id".to_string(), err))?)
-        .bind(until.to_string())
-        .execute(&self.pool)
-        .await?;
+        let result = self
+            .tx(async |tx| {
+                query(
+                    "
+                    DELETE FROM
+                        operations_v1
+                    WHERE
+                        verifying_key = ?
+                        AND log_id = ?
+                        AND seq_num < ?
+                    ",
+                )
+                .bind(author.to_string())
+                .bind(
+                    encode_cbor(&log_id)
+                        .map_err(|err| SqliteError::Encode("log id".to_string(), err))?,
+                )
+                .bind(until.to_string())
+                .execute(&mut **tx)
+                .await
+                .map_err(SqliteError::Sqlite)
+            })
+            .await?;
 
         let pruned_entries_num = result.rows_affected();
-
         Ok(pruned_entries_num)
     }
 }

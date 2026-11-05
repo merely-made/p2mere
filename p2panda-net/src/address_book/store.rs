@@ -189,7 +189,7 @@ where
 {
     fn insert_node_info(&self, info: NodeInfo) -> StoreFuture<'_, bool> {
         Box::pin(async move {
-            AddressBookStore::<NodeId, NodeInfo>::insert_node_info(&self.0, info)
+            AddressBookStore::<NodeId, NodeInfo>::insert_node_info_tx(&self.0, info)
                 .await
                 .map_err(StoreError::new)
         })
@@ -198,7 +198,7 @@ where
     fn remove_node_info(&self, id: &NodeId) -> StoreFuture<'_, bool> {
         let id = *id;
         Box::pin(async move {
-            AddressBookStore::<NodeId, NodeInfo>::remove_node_info(&self.0, &id)
+            AddressBookStore::<NodeId, NodeInfo>::remove_node_info_tx(&self.0, &id)
                 .await
                 .map_err(StoreError::new)
         })
@@ -206,7 +206,7 @@ where
 
     fn remove_older_than(&self, duration: Duration) -> StoreFuture<'_, usize> {
         Box::pin(async move {
-            AddressBookStore::<NodeId, NodeInfo>::remove_older_than(&self.0, duration)
+            AddressBookStore::<NodeId, NodeInfo>::remove_older_than_tx(&self.0, duration)
                 .await
                 .map_err(StoreError::new)
         })
@@ -214,7 +214,7 @@ where
 
     fn set_topics(&self, id: NodeId, topics: HashSet<Topic>) -> StoreFuture<'_, ()> {
         Box::pin(async move {
-            AddressBookStore::<NodeId, NodeInfo>::set_topics(&self.0, id, topics)
+            AddressBookStore::<NodeId, NodeInfo>::set_topics_tx(&self.0, id, topics)
                 .await
                 .map_err(StoreError::new)
         })
@@ -235,7 +235,7 @@ where
     fn insert_node_info(&self, info: NodeInfo) -> StoreFuture<'_, bool> {
         Box::pin(async move {
             let permit = Transaction::begin(&self.0).await.map_err(StoreError::new)?;
-            let result = AddressBookStore::<NodeId, NodeInfo>::insert_node_info(&self.0, info)
+            let result = AddressBookStore::<NodeId, NodeInfo>::insert_node_info_tx(&self.0, info)
                 .await
                 .map_err(StoreError::new)?;
             Transaction::commit(&self.0, permit)
@@ -249,7 +249,7 @@ where
         let id = *id;
         Box::pin(async move {
             let permit = Transaction::begin(&self.0).await.map_err(StoreError::new)?;
-            let result = AddressBookStore::<NodeId, NodeInfo>::remove_node_info(&self.0, &id)
+            let result = AddressBookStore::<NodeId, NodeInfo>::remove_node_info_tx(&self.0, &id)
                 .await
                 .map_err(StoreError::new)?;
             Transaction::commit(&self.0, permit)
@@ -262,7 +262,7 @@ where
     fn remove_older_than(&self, duration: Duration) -> StoreFuture<'_, usize> {
         Box::pin(async move {
             let permit = Transaction::begin(&self.0).await.map_err(StoreError::new)?;
-            let result = AddressBookStore::<NodeId, NodeInfo>::remove_older_than(&self.0, duration)
+            let result = AddressBookStore::<NodeId, NodeInfo>::remove_older_than_tx(&self.0, duration)
                 .await
                 .map_err(StoreError::new)?;
             Transaction::commit(&self.0, permit)
@@ -275,7 +275,7 @@ where
     fn set_topics(&self, id: NodeId, topics: HashSet<Topic>) -> StoreFuture<'_, ()> {
         Box::pin(async move {
             let permit = Transaction::begin(&self.0).await.map_err(StoreError::new)?;
-            AddressBookStore::<NodeId, NodeInfo>::set_topics(&self.0, id, topics)
+            AddressBookStore::<NodeId, NodeInfo>::set_topics_tx(&self.0, id, topics)
                 .await
                 .map_err(StoreError::new)?;
             Transaction::commit(&self.0, permit)
@@ -322,15 +322,15 @@ impl fmt::Debug for AddressBookStoreHandle {
 impl AddressBookStore<NodeId, NodeInfo> for AddressBookStoreHandle {
     type Error = StoreError;
 
-    fn insert_node_info(&self, info: NodeInfo) -> impl Future<Output = Result<bool, Self::Error>> {
+    fn insert_node_info_tx(&self, info: NodeInfo) -> impl Future<Output = Result<bool, Self::Error>> {
         self.0.insert_node_info(info)
     }
 
-    fn remove_node_info(&self, id: &NodeId) -> impl Future<Output = Result<bool, Self::Error>> {
+    fn remove_node_info_tx(&self, id: &NodeId) -> impl Future<Output = Result<bool, Self::Error>> {
         self.0.remove_node_info(id)
     }
 
-    fn remove_older_than(
+    fn remove_older_than_tx(
         &self,
         duration: Duration,
     ) -> impl Future<Output = Result<usize, Self::Error>> {
@@ -370,7 +370,7 @@ impl AddressBookStore<NodeId, NodeInfo> for AddressBookStoreHandle {
         self.0.selected_node_infos(ids)
     }
 
-    fn set_topics(
+    fn set_topics_tx(
         &self,
         id: NodeId,
         topics: HashSet<Topic>,

@@ -4,8 +4,9 @@ mod authoriser;
 mod forge;
 mod group;
 mod member;
+pub(crate) mod member_processor;
 pub(crate) mod message;
-mod repair;
+pub(crate) mod repair;
 mod space;
 pub(crate) mod types;
 
@@ -20,19 +21,18 @@ pub use p2panda_spaces::manager::ManagerError;
 pub use p2panda_spaces::{ActorId, GroupContext, GroupId, MemberId, SpaceContext, SpaceId};
 
 pub(crate) use authoriser::SyncAuthoriserHook;
-pub(crate) use forge::{group_log_id, member_log_id};
-pub(crate) use group::group_stream;
+pub(crate) use forge::member_log_id;
 pub use group::{
-    AddGroupMemberError, Group, GroupError, GroupSubscription, RemoveGroupMemberError,
+    AddGroupMemberError, Group, GroupSubscription, PendingGroup, RemoveGroupMemberError,
 };
-pub use member::{GroupActor, Member, MemberError};
-pub(crate) use member::{KeyBundleTask, MemberAssociationHook};
-pub(crate) use repair::{DEFAULT_REPAIR_STRATEGY, RepairError, RepairTask};
+pub(crate) use group::{group_stream, is_group, pending_group_stream};
+pub(crate) use member::KeyBundleTask;
+pub use member::{GroupActor, Member, MemberError, PendingMember};
 pub use space::{
-    AddSpaceMemberError, PublishSpaceError, RemoveSpaceMemberError, Space, SpaceEgressError,
-    SpaceFuture, SpaceSubscription,
+    AddSpaceMemberError, PendingSpace, PublishSpaceError, RemoveSpaceMemberError, Space,
+    SpaceEgressError, SpaceFuture, SpaceSubscription,
 };
-pub(crate) use space::{dispatch_spaces_events, spaces_stream};
+pub(crate) use space::{dispatch_spaces_events, pending_spaces_stream, spaces_stream};
 pub use types::{InnerGroupEvent, InnerSpaceError, SpacesManagerError};
 
 use crate::Credentials;
