@@ -78,6 +78,14 @@ p2panda)". Workspace dependency keys keep the `p2panda-*` names with
   compile when packaged alone. The same gap exists upstream; this one is worth
   offering back.
 
+## SQLite decoupling (2026-11-05, 0.9.0)
+
+- `p2mere-store`'s `encryption`, `groups`, `spaces` and `processor` features no
+  longer enable `sqlite`; the SQLite implementations were already gated
+  module by module. `p2mere-spaces` gains a default `sqlite` feature, so
+  `default-features = false` builds spaces with no sqlx (the six store traits
+  `Manager` needs are backend-neutral). Upstream couples them; this follows D8.
+
 ## Intake rule
 
 Upstream work comes in by selective merge or cherry-pick, never a blind

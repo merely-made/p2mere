@@ -37,20 +37,15 @@ sqlite = [
 ]
 encryption = [
   "dep:p2panda-encryption",
-  "sqlite",
 ]
 groups = [
   "dep:p2panda-auth",
-  "sqlite",
 ]
 spaces = [
-  "sqlite",
   "groups",
   "encryption",
 ]
-processor = [
-  "sqlite"
-]
+processor = []
 macros = []
 test_utils = [
   "dep:rand",

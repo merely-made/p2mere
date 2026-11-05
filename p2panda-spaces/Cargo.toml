@@ -24,7 +24,12 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [features]
+default = ["sqlite"]
+# SQLite-backed store implementations. Off for hosts that bring their own
+# store (the six traits `Manager` needs are backend-neutral).
+sqlite = ["p2panda-store/sqlite"]
 test_utils = [
+  "sqlite",
   "p2panda-auth/test_utils",
   "p2panda-encryption/test_utils",
   "p2panda-store/macros",
@@ -36,7 +41,7 @@ test_utils = [
 p2panda-auth = { workspace = true, default-features = false, features = ["serde"] }
 p2panda-core = { workspace = true, default-features = false }
 p2panda-encryption = { workspace = true, default-features = false, features = ["data_scheme"] }
-p2panda-store = { workspace = true, features = ["sqlite", "spaces"] }
+p2panda-store = { workspace = true, features = ["spaces"] }
 petgraph = "0.8.2"
 serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
