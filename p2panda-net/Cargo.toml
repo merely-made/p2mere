@@ -78,7 +78,7 @@ test_utils = [
 ]
 
 [dependencies]
-futures-channel = { workspace = true }
+futures-channel = { workspace = true, features = ["sink"] }
 futures-util = { workspace = true, default-features = true }
 hex =  { workspace = true }
 iroh = { version = "1.3.0", default-features = false, features = ["tls-ring"], optional = true }

@@ -37,7 +37,7 @@ test_utils = [
 ]
 
 [dependencies]
-futures-channel = { workspace = true }
+futures-channel = { workspace = true, features = ["sink"] }
 futures-util = { workspace = true, default-features = true, features = ["sink"] }
 p2panda-core = { workspace = true, default-features = true }
 p2panda-store = { workspace = true, default-features = false }

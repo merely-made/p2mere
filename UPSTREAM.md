@@ -70,6 +70,14 @@ p2panda)". Workspace dependency keys keep the `p2panda-*` names with
 
 `p2panda-fuzz` stays unpublished.
 
+## Packaging fixes (2026-11-05, branch `p2mere`)
+
+- `p2panda-sync` and `p2panda-net` enable `futures-channel`'s `sink` feature.
+  Both use `mpsc::Sender` as a `Sink` but relied on `p2panda-discovery`
+  enabling the feature through workspace unification, so each failed to
+  compile when packaged alone. The same gap exists upstream; this one is worth
+  offering back.
+
 ## Intake rule
 
 Upstream work comes in by selective merge or cherry-pick, never a blind
