@@ -1,18 +1,21 @@
 [package]
-name = "p2panda-auth"
-version = "0.7.1"
+name = "p2mere-auth"
+version = "0.8.0"
 edition = "2024"
 authors = [
   "adz <x12@adz.garden>",
   "sandreae <contact@samandreae.com>",
   "glyph <glyph@mycelial.technology>",
 ]
-description = "Decentralised group management with fine-grained, per-member permissions"
-repository = "https://github.com/p2panda/p2panda"
+description = "Decentralised group management with fine-grained, per-member permissions (merely-made fork of p2panda)"
+repository = "https://github.com/merely-made/p2mere"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 keywords = ["auth", "access-control", "groups", "crdt", "offline-first"]
 rust-version = "1.96"
+
+[lib]
+name = "p2panda_auth"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -48,4 +51,4 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"], optional = true }
 
 [dev-dependencies]
-p2panda-auth = { path = ".", features = ["test_utils"] }
+p2panda-auth = { package = "p2mere-auth", path = ".", features = ["test_utils"] }

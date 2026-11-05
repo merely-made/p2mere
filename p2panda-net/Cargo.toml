@@ -1,14 +1,14 @@
 [package]
-name = "mere-p2panda-net"
-version = "0.7.5"
+name = "p2mere-net"
+version = "0.8.0"
 edition = "2024"
 authors = [
   "adz <x12@adz.garden>",
   "sandreae <contact@samandreae.com>",
   "glyph <glyph@mycelial.technology>",
 ]
-description = "Data-type-agnostic p2p networking, discovery, gossip and local-first sync"
-repository = "https://github.com/p2panda/p2panda"
+description = "Data-type-agnostic p2p networking, discovery, gossip and local-first sync (merely-made fork of p2panda)"
+repository = "https://github.com/merely-made/p2mere"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 keywords = ["p2p", "local-first", "sync", "gossip", "discovery"]
@@ -106,7 +106,7 @@ clap = { version = "4.5.54", features = ["derive"] }
 futures-test = { workspace = true }
 mock_instant = { workspace = true }
 p2panda-discovery = { workspace = true, default-features = true, features = ["test_utils"] }
-p2panda-net = { package = "mere-p2panda-net", path = ".", features = ["test_utils"] }
+p2panda-net = { package = "p2mere-net", path = ".", features = ["test_utils"] }
 p2panda-store = { workspace = true, default-features = true, features = ["test_utils"] }
 p2panda-sync = { workspace = true, default-features = true, features = ["test_utils"] }
 tokio = { workspace = true, default-features = true, features = ["rt", "sync", "time", "signal"] }

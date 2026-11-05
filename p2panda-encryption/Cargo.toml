@@ -1,18 +1,21 @@
 [package]
-name = "p2panda-encryption"
-version = "0.7.1"
+name = "p2mere-encryption"
+version = "0.8.0"
 edition = "2024"
 authors = [
   "adz <x12@adz.garden>",
   "sandreae <contact@samandreae.com>",
   "glyph <glyph@mycelial.technology>",
 ]
-description = "Decentralised data- and message encryption for groups with post-compromise security and optional forward secrecy"
-repository = "https://github.com/p2panda/p2panda"
+description = "Decentralised data- and message encryption for groups with post-compromise security and optional forward secrecy (merely-made fork of p2panda)"
+repository = "https://github.com/merely-made/p2mere"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 keywords = ["p2p", "encryption", "groups", "double-ratchet"]
 rust-version = "1.96"
+
+[lib]
+name = "p2panda_encryption"
 
 [package.metadata.docs.rs]
 all-features = true

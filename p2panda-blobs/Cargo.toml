@@ -1,18 +1,21 @@
 [package]
-name = "p2panda-blobs"
-version = "0.7.1"
+name = "p2mere-blobs"
+version = "0.8.0"
 edition = "2024"
 authors = [
   "adz <x12@adz.garden>",
   "sandreae <contact@samandreae.com>",
   "glyph <glyph@mycelial.technology>",
 ]
-description = "Blob storage, retrieval and synchronisation"
-repository = "https://github.com/p2panda/p2panda"
+description = "Blob storage, retrieval and synchronisation (merely-made fork of p2panda)"
+repository = "https://github.com/merely-made/p2mere"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 keywords = ["storage", "streaming", "blobs", "bao", "blake3"]
 rust-version = "1.96"
+
+[lib]
+name = "p2panda_blobs"
 
 [package.metadata.docs.rs]
 all-features = true
