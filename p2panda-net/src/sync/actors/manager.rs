@@ -402,7 +402,7 @@ where
                         .remove(&sync_manager.get_id());
 
                     // Finish processing all messages in the manager's queue and then kill it.
-                    sync_manager.drain()?;
+                    sync_manager.drain_and_wait(None).await?;
                 }
 
                 // Drop all channels and handles associated with the topic. The removed gossip

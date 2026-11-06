@@ -164,6 +164,39 @@ async fn shutdown_waits_until_topic_managers_release_the_store() {
     );
 }
 
+/// Dropping the stream handle asks the sync manager to close the topic, which used to drain the
+/// topic manager without waiting for it. A `shutdown` racing that close then returned while the
+/// topic manager still owned a store handle, so a durable backend was still locked. The leak is
+/// timing dependent, so repeat the sequence many times.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn shutdown_releases_topic_manager_store_immediately() {
+    setup_logging();
+
+    let node = TestNode::spawn_with_args(test_args(), None).await;
+    for round in 0..300 {
+        let store = ReleaseTrackedStore::default();
+        let log_sync = LogSync::<ReleaseTrackedStore, u64, ()>::builder(
+            store.clone(),
+            node.endpoint.clone(),
+            node.gossip.clone(),
+        )
+        .protocol_id(format!("p2panda-tests/store-release-loop-{round}").into_bytes())
+        .spawn()
+        .await
+        .unwrap();
+
+        let handle = log_sync.stream(Topic::random(), true).await.unwrap();
+        drop(handle);
+
+        log_sync.shutdown().await.unwrap();
+        assert_eq!(
+            store.live_handles(),
+            1,
+            "round {round}: a store handle outlived shutdown"
+        );
+    }
+}
+
 #[tokio::test]
 async fn idle_shutdown_returns_promptly() {
     setup_logging();
