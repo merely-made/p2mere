@@ -1,17 +1,20 @@
 [package]
-name = "p2panda-discovery"
-version = "0.7.1"
+name = "p2mere-discovery"
+version = "0.9.0"
 edition = "2024"
 authors = [
   "adz <x12@adz.garden>",
   "jackaperkins <jackaperkins@posteo.net>",
 ]
-description = "Confidential topic and node discovery protocol"
-repository = "https://github.com/p2panda/p2panda"
+description = "Confidential topic and node discovery protocol (merely-made fork of p2panda)"
+repository = "https://github.com/merely-made/p2mere"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 keywords = ["p2p", "discovery", "confidential"]
 rust-version = "1.96"
+
+[lib]
+name = "p2panda_discovery"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -43,6 +46,6 @@ tokio = { workspace = true, features = ["sync"], optional = true }
 
 [dev-dependencies]
 futures-channel = { workspace = true, features = ["sink"] }
-p2panda-discovery = { path = ".", features = ["test_utils"] }
+p2panda-discovery = { package = "p2mere-discovery", path = ".", features = ["test_utils"] }
 p2panda-store = { workspace = true, features = ["test_utils", "sqlite", "macros"] }
 tokio = { workspace = true, features = ["macros", "rt", "sync"] }

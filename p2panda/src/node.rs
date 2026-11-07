@@ -22,16 +22,16 @@ use crate::credentials::Credentials;
 use crate::debouncer::Debouncer;
 use crate::egress::{Egress, EgressError, StreamType, SubmitError};
 use crate::forge::{Forge, OperationForge};
-use crate::hooks::{GroupsHook, RepairHook};
+use crate::hooks::RepairHook;
 use crate::network::{Network, NetworkConfig, NetworkError};
 use crate::spaces::repair::{RepairCommandError, RepairTask};
 use crate::spaces::types::{NoBody, SpacesManager, SpacesManagerError};
 use crate::spaces::{
-    AccessLevel, ActorId, Group, GroupSubscription, KeyBundleTask, Member, MemberAssociationHook,
-    MemberError, PendingGroup, PendingMember, PendingSpace, Space, SpaceEgressError,
-    SpaceSubscription, SyncAuthoriserHook, actor_to_topic, dispatch_spaces_events, group_stream,
-    is_group, member_log_id, pending_group_stream, pending_spaces_stream, spaces_manager,
-    spaces_stream, to_initial_members,
+    AccessLevel, ActorId, Group, GroupSubscription, KeyBundleTask, Member, MemberError,
+    PendingGroup, PendingMember, PendingSpace, Space, SpaceEgressError, SpaceSubscription,
+    SyncAuthoriserHook, actor_to_topic, dispatch_spaces_events, group_stream, is_group,
+    member_log_id, pending_group_stream, pending_spaces_stream, spaces_manager, spaces_stream,
+    to_initial_members,
 };
 use crate::streams::{
     EphemeralStreamPublisher, EphemeralStreamSubscription, Event, ImportError, Pipeline,
@@ -382,6 +382,7 @@ impl Node {
             self.store.clone(),
             self.tasks.clone(),
             self.spaces_manager.clone(),
+            self.egress.handle(),
             post_pipeline_hooks,
         );
 
@@ -512,6 +513,10 @@ impl Node {
         let egress_handle = self.egress.handle();
 
         // Trigger repair so that any missing operations can be incorporated into the group.
+        //
+        // Operations might have not yet been incorporated into the group if a critical error
+        // occurred which interrupted a preceding repair attempt, or if operations effecting this
+        // group arrived since the last subscription.
         self.repair_task.repair_all().await?;
 
         // Even if there is no group yet we allow the user to subscribe, this is required to
@@ -541,7 +546,6 @@ impl Node {
 
         let mut post_pipeline = ProcessorHooksList::new();
         post_pipeline.push(SyncAuthoriserHook::new(self.sync_block_list.clone()));
-        post_pipeline.push(GroupsHook::new(topic, self.store.clone()));
         post_pipeline.push(RepairHook::new(self.repair_task.clone()));
 
         self.stream_from_inner(topic, from, StreamType::Group, post_pipeline, None)
@@ -643,6 +647,10 @@ impl Node {
         let egress_handle = self.egress.handle();
 
         // Trigger repair so that any missing operations can be incorporated into the space.
+        //
+        // Operations might have not yet been incorporated into the space if a critical error
+        // occurred which interrupted a preceding repair attempt, or if operations effecting this
+        // space arrived since the last subscription.
         self.repair_task.repair_all().await?;
 
         Ok(pending_spaces_stream::<M>(
@@ -667,8 +675,6 @@ impl Node {
 
         let mut post_pipeline = ProcessorHooksList::new();
         post_pipeline.push(SyncAuthoriserHook::new(self.sync_block_list.clone()));
-        post_pipeline.push(MemberAssociationHook::new(self.id(), self.store.clone()));
-        post_pipeline.push(GroupsHook::new(topic, self.store.clone()));
         post_pipeline.push(RepairHook::new(self.repair_task.clone()));
 
         self.stream_from_inner(topic, from, StreamType::Space, post_pipeline, None)
@@ -730,8 +736,16 @@ impl Node {
         self.network.network_id()
     }
 
+    /// Returns our own member handle including our latest valid key bundle.
+    ///
+    /// The key bundle is automatically published and renewed by a background task.
     pub async fn me(&self) -> Result<Member, MemberError> {
-        let inner = self.spaces_manager.me().await?;
+        let inner = self
+            .spaces_manager
+            .me()
+            .await?
+            .into_valid()
+            .ok_or(MemberError::KeyBundleUnavailable)?;
         Ok(Member { inner })
     }
 

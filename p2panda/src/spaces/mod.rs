@@ -4,6 +4,7 @@ mod authoriser;
 mod forge;
 mod group;
 mod member;
+pub(crate) mod member_processor;
 pub(crate) mod message;
 pub(crate) mod repair;
 mod space;
@@ -20,13 +21,13 @@ pub use p2panda_spaces::manager::ManagerError;
 pub use p2panda_spaces::{ActorId, GroupContext, GroupId, MemberId, SpaceContext, SpaceId};
 
 pub(crate) use authoriser::SyncAuthoriserHook;
-pub(crate) use forge::{group_log_id, member_log_id};
+pub(crate) use forge::member_log_id;
 pub use group::{
     AddGroupMemberError, Group, GroupSubscription, PendingGroup, RemoveGroupMemberError,
 };
 pub(crate) use group::{group_stream, is_group, pending_group_stream};
+pub(crate) use member::KeyBundleTask;
 pub use member::{GroupActor, Member, MemberError, PendingMember};
-pub(crate) use member::{KeyBundleTask, MemberAssociationHook};
 pub use space::{
     AddSpaceMemberError, PendingSpace, PublishSpaceError, RemoveSpaceMemberError, Space,
     SpaceEgressError, SpaceFuture, SpaceSubscription,

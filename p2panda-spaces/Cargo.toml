@@ -1,17 +1,20 @@
 [package]
-name = "p2panda-spaces"
-version = "0.7.1"
+name = "p2mere-spaces"
+version = "0.9.0"
 edition = "2024"
 authors = [
   "adz <x12@adz.garden>",
   "sandreae <contact@samandreae.com>",
   "glyph <glyph@mycelial.technology>",
 ]
-description = "Data encryption for multi-device groups"
-repository = "https://github.com/p2panda/p2panda"
+description = "Data encryption for multi-device groups (merely-made fork of p2panda)"
+repository = "https://github.com/merely-made/p2mere"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 rust-version = "1.96"
+
+[lib]
+name = "p2panda_spaces"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -21,7 +24,12 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [features]
+default = ["sqlite"]
+# SQLite-backed store implementations. Off for hosts that bring their own
+# store (the six traits `Manager` needs are backend-neutral).
+sqlite = ["p2panda-store/sqlite"]
 test_utils = [
+  "sqlite",
   "p2panda-auth/test_utils",
   "p2panda-encryption/test_utils",
   "p2panda-store/macros",
@@ -33,7 +41,7 @@ test_utils = [
 p2panda-auth = { workspace = true, default-features = false, features = ["serde"] }
 p2panda-core = { workspace = true, default-features = false }
 p2panda-encryption = { workspace = true, default-features = false, features = ["data_scheme"] }
-p2panda-store = { workspace = true, features = ["sqlite", "spaces"] }
+p2panda-store = { workspace = true, features = ["spaces"] }
 petgraph = "0.8.2"
 serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
@@ -43,5 +51,5 @@ tracing = { workspace = true }
 [dev-dependencies]
 assert_matches = "1.5.0"
 p2panda-core = { workspace = true, default-features = false, features = ["test_utils"] }
-p2panda-spaces = { path = ".", features = ["test_utils"] }
+p2panda-spaces = { package = "p2mere-spaces", path = ".", features = ["test_utils"] }
 tokio = { workspace = true, features = ["rt", "macros", "time"] }

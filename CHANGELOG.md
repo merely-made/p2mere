@@ -60,6 +60,9 @@ Highlights are marked with a pancake 🥞
 - node: Return `PendingSpace` to account for situations where it doesn't exist yet [#1529](https://github.com/p2panda/p2panda/pull/1529)
 - node: Await created, joined group events with `PendingGroup` [#1530](https://github.com/p2panda/p2panda/pull/1530)
 - node: Await registration of member key bundles with `PendingMember` [#1531](https://github.com/p2panda/p2panda/pull/1531)
+- node: Efficient encoding of authenticated member info (for QR codes, etc.) [#1547](https://github.com/p2panda/p2panda/pull/1547)
+- node: Move member log association to hook and dispatch key bundle operations for live-mode [#1550](https://github.com/p2panda/p2panda/pull/1550)
+
 
 ### Changed
 
@@ -87,6 +90,7 @@ Highlights are marked with a pancake 🥞
 - store: Namespace event metadata entries [#1521](https://github.com/p2panda/p2panda/pull/1521)
 - node: Repair task re-write with hook trigger [#1500](https://github.com/p2panda/p2panda/pull/1500)
 - node: Integrate new repair task into Node, Space and Group [#1498](https://github.com/p2panda/p2panda/pull/1498)
+- net: Update iroh to `v1.4.1` and iroh-gossip to `v0.102.0` [#1565](https://github.com/p2panda/p2panda/pull/1565)
 
 ### Fixed
 
@@ -103,11 +107,17 @@ Highlights are marked with a pancake 🥞
 - spaces: Fix calculation of historically removed members [#1455](https://github.com/p2panda/p2panda/pull/1455)
 - spaces: Fix bug instantiating space from existing groups state [#1457](https://github.com/p2panda/p2panda/pull/1457)
 - spaces: Atomic read -> modify -> write state handling for groups and spaces [#1513](https://github.com/p2panda/p2panda/pull/1513)
+- spaces: Separate key rotation and retrieval around key bundle APIs, making it more robust [#1547](https://github.com/p2panda/p2panda/pull/1547)
 - store: Use `BEGIN IMMEDIATE` in database transaction to allow awaiting busy write locks across processes [#1502](https://github.com/p2panda/p2panda/pull/1502)
 - net: Do not block sync actor awaiting `send_after` on retry [#1506](https://github.com/p2panda/p2panda/pull/1506)
 - store: Fix "write" methods not using transactions, consistent naming with _tx suffix [#1515](https://github.com/p2panda/p2panda/pull/1515)
 - node: Fix flaky spaces tests [#1539](https://github.com/p2panda/p2panda/pull/1539)
 - node: Trigger repair before any local group or space action [#1541](https://github.com/p2panda/p2panda/pull/1541)
+- encryption: Fix RUSTSEC-2026-0387 by updating hpke-rs v0.8.0 [#1557](https://github.com/p2panda/p2panda/pull/1557)
+- node: Associate group logs with topic in ingest processor [#1553](https://github.com/p2panda/p2panda/pull/1553)
+- node: Rename chat example to prevent filename collision [#1560](https://github.com/p2panda/p2panda/pull/1560)
+- store: Fix LogStore::log_entries long-lived database connection blocking pipeline [#1554](https://github.com/p2panda/p2panda/pull/1554)
+- net: Fix flaky e2e_log_sync test [#1566](https://github.com/p2panda/p2panda/pull/1566)
 
 ## [0.7.1] - 21/08/2026
 
