@@ -10,6 +10,8 @@ pub(crate) mod repair;
 mod space;
 pub(crate) mod types;
 
+use std::collections::HashMap;
+
 use p2panda_auth::Access;
 use p2panda_core::Topic;
 use p2panda_spaces::Config;
@@ -33,12 +35,13 @@ pub use space::{
     SpaceEgressError, SpaceFuture, SpaceSubscription,
 };
 pub(crate) use space::{dispatch_spaces_events, pending_spaces_stream, spaces_stream};
-pub use types::{InnerGroupEvent, InnerSpaceError, SpacesManagerError};
+pub use types::{InnerGroupEvent, SpacesManagerError};
 
 use crate::Credentials;
 use crate::forge::OperationForge;
 use crate::spaces::types::{AuthCapabilities, SpacesManager, SpacesStore};
 
+// TODO: Should this be exported to the public API?
 #[allow(clippy::result_large_err)]
 pub fn spaces_manager(
     forge: OperationForge,
@@ -79,7 +82,7 @@ pub(crate) fn to_initial_members(
 
 pub(crate) fn to_members(
     members: &[(ActorId, Access<AuthCapabilities>)],
-) -> Vec<(ActorId, AccessLevel)> {
+) -> HashMap<ActorId, AccessLevel> {
     members
         .iter()
         .map(|(actor, access)| (*actor, access.level))
@@ -88,9 +91,9 @@ pub(crate) fn to_members(
 
 pub(crate) fn to_actors(
     actors: &[(p2panda_spaces::GroupActor, Access<AuthCapabilities>)],
-) -> Vec<(GroupActor, AccessLevel)> {
+) -> HashMap<ActorId, (GroupActor, AccessLevel)> {
     actors
         .iter()
-        .map(|(actor, access)| (actor.clone().into(), access.level))
+        .map(|(actor, access)| (actor.id(), (actor.clone().into(), access.level)))
         .collect()
 }
