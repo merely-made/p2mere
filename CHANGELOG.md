@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Highlights are marked with a pancake 🥞
 
-## [Unreleased]
+## [0.8.0] - 09/11/2026
 
 ### Added
 
@@ -62,7 +62,7 @@ Highlights are marked with a pancake 🥞
 - node: Await registration of member key bundles with `PendingMember` [#1531](https://github.com/p2panda/p2panda/pull/1531)
 - node: Efficient encoding of authenticated member info (for QR codes, etc.) [#1547](https://github.com/p2panda/p2panda/pull/1547)
 - node: Move member log association to hook and dispatch key bundle operations for live-mode [#1550](https://github.com/p2panda/p2panda/pull/1550)
-
+- node: Add high-level spaces docs and introduce method-specific errors [#1527](https://github.com/p2panda/p2panda/pull/1527)
 
 ### Changed
 
@@ -91,6 +91,7 @@ Highlights are marked with a pancake 🥞
 - node: Repair task re-write with hook trigger [#1500](https://github.com/p2panda/p2panda/pull/1500)
 - node: Integrate new repair task into Node, Space and Group [#1498](https://github.com/p2panda/p2panda/pull/1498)
 - net: Update iroh to `v1.4.1` and iroh-gossip to `v0.102.0` [#1565](https://github.com/p2panda/p2panda/pull/1565)
+- node: Remove space_id arg from Node::create_space [#1574](https://github.com/p2panda/p2panda/pull/1574)
 
 ### Fixed
 
@@ -116,8 +117,10 @@ Highlights are marked with a pancake 🥞
 - encryption: Fix RUSTSEC-2026-0387 by updating hpke-rs v0.8.0 [#1557](https://github.com/p2panda/p2panda/pull/1557)
 - node: Associate group logs with topic in ingest processor [#1553](https://github.com/p2panda/p2panda/pull/1553)
 - node: Rename chat example to prevent filename collision [#1560](https://github.com/p2panda/p2panda/pull/1560)
+- node: Fix handling multiple application bodies in post pipeline logic [#1567](https://github.com/p2panda/p2panda/pull/1567)
 - store: Fix LogStore::log_entries long-lived database connection blocking pipeline [#1554](https://github.com/p2panda/p2panda/pull/1554)
 - net: Fix flaky e2e_log_sync test [#1566](https://github.com/p2panda/p2panda/pull/1566)
+- node: Add `members` and `actors` fields to `StreamEvent::Group` [#1561](https://github.com/p2panda/p2panda/pull/1561)
 
 ## [0.7.1] - 21/08/2026
 
@@ -420,7 +423,8 @@ Highlights are marked with a pancake 🥞
 
 Version `v0.1.0` represents the first release of the new p2panda stack! You can find out more details by reading our [blog](https://p2panda.org/2024/12/06/p2panda-release.html).
 
-[unreleased]: https://github.com/p2panda/p2panda/compare/v0.7.1...HEAD
+[unreleased]: https://github.com/p2panda/p2panda/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/p2panda/p2panda/releases/tag/v0.8.0
 [0.7.1]: https://github.com/p2panda/p2panda/releases/tag/v0.7.1
 [0.7.0]: https://github.com/p2panda/p2panda/releases/tag/v0.6.1
 [0.6.1]: https://github.com/p2panda/p2panda/releases/tag/v0.6.1
