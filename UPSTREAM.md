@@ -16,7 +16,10 @@ consumer source code does not change; only manifests do.
   merge-base is 0.7.1 plus later upstream main commits).
 - `p2panda/p2panda` main at the previous ledger (2026-11-05):
   `d01898bfbce6af61abcb474c7b07f75eac5fbd69`, 59 commits past the merge-base.
-  Taken in the intake below.
+  Taken in the 2026-11-05 intake.
+- `p2panda/p2panda` `v0.8.0` (2026-11-09):
+  `c7cac9afb45d52bdc94e6e2765a1dcf8c79b3734`, 10 commits past `d01898bf`.
+  Taken in the 2026-11-09 intake.
 - Code differences from the merge-base to the base tag: 32 files, +1380 -125.
 
 ## Family patches over upstream (merge-base to base tag)
@@ -144,3 +147,36 @@ speak upstream's protocols.
 
 Tests: `test --workspace --exclude p2mere` passes (361 tests). The umbrella
 `p2mere` (`tests/api.rs`) is excluded, as before.
+
+## Intake 2026-11-09 (branch `p2mere`, version 0.10.0)
+
+Upstream revision taken: tag `v0.8.0` = `c7cac9af` (2026-11-09), merged whole:
+10 commits past `d01898bf`. Versions move to 0.10.0 in every package, because
+`p2mere-spaces` events changed shape and the umbrella node API changed.
+Upstream's own 0.8.0 numbering is unrelated to ours.
+
+Taken:
+
+- p2panda-spaces: an added member receives messages sent before it joined
+  (the missing-history fix, with a messaging test); group events carry
+  `ancestor_members` and `ancestor_actors` in place of `ancestors` and the
+  `effected_group_*` maps, with `actors(group_id)` replacing `effected_group`.
+- p2panda (high-level node): handling of operations with several application
+  bodies fixed and op ids asserted unique; `Node::create_space` no longer takes
+  a space id; method-specific error types; `StreamEvent::Group` gains
+  `members` and `actors`; docs and examples. The family does not link this
+  crate.
+- Small changes in auth validation, net and sync re-exports, and the store's
+  key-secrets module.
+
+Reconciled with family patches: manifest conflicts only (package names and
+versions); `p2mere-*` names, the `sink` fix, the SQLite decoupling and
+`p2mere-net`'s 0.9.1 topic-close fix (`436da84f`) kept.
+
+Declined: nothing. No protocol ids, ALPN handling or non-spaces wire encodings
+changed.
+
+Tests: `test --workspace --exclude p2mere` passes (363 tests);
+`check -p p2mere --all-targets --all-features` is clean. The umbrella's
+`tests/api.rs` stays excluded.
+
