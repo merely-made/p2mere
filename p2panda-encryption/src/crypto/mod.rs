@@ -24,5 +24,8 @@ pub mod x25519;
 pub mod xchacha20;
 pub mod xeddsa;
 
+#[cfg(test)]
+mod known_answers;
+
 pub use rng::{Rng, RngError};
 pub use secret::Secret;

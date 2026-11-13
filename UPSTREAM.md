@@ -180,3 +180,17 @@ Tests: `test --workspace --exclude p2mere` passes (363 tests);
 `check -p p2mere --all-targets --all-features` is clean. The umbrella's
 `tests/api.rs` stays excluded.
 
+
+## One-version bump (2026-11-13, engine-split D144 / one-version P1)
+
+Family change, not from upstream. `p2mere-encryption` moves to
+chacha20poly1305 0.11 (aead 0.6: `AeadInPlace` becomes `AeadInOut`, keys and
+nonces are `hybrid-array` borrows; the `zeroize` feature keeps the cipher's
+zeroize-on-drop, which 0.10 had unconditionally), hkdf 0.13, sha2 0.11 and the
+workspace rand_chacha 0.10 (`from_os_rng` becomes `try_from_rng(&mut SysRng)`).
+`p2mere-core` moves to the workspace rand 0.10: `OsRng` becomes `SysRng`, and
+`Topic::from_rng` now takes a rand 0.10 `Rng` (no family caller uses it).
+Bytes are unchanged: `crypto::known_answers` holds the RFC 5869 and FIPS 180
+vectors and ChaCha20-Poly1305, XChaCha20-Poly1305 and ChaCha20Rng outputs
+recorded with the previous releases, and all pass on both. Not yet published;
+consumers take `p2mere-*` from crates.io.

@@ -3,7 +3,7 @@
 //! ChaCha20Poly1305 authenticated encryption with additional data (AEAD).
 //!
 //! <https://www.rfc-editor.org/rfc/rfc7905>
-use chacha20poly1305::{AeadInPlace, ChaCha20Poly1305, Key, KeyInit, Nonce};
+use chacha20poly1305::{AeadInOut, ChaCha20Poly1305, Key, KeyInit, Nonce};
 use thiserror::Error;
 
 /// 96-bit nonce.
@@ -13,7 +13,6 @@ pub type AeadNonce = [u8; 12];
 pub type AeadKey = [u8; 32];
 
 /// ChaCha20Poly1305 AEAD encryption function.
-#[allow(deprecated, reason = "generic_array < v1.0 is deprecated")]
 pub fn aead_encrypt(
     key: &AeadKey,
     plaintext: &[u8],
@@ -21,8 +20,8 @@ pub fn aead_encrypt(
     aad: Option<&[u8]>,
 ) -> Result<Vec<u8>, AeadError> {
     // Implementation attaches authenticated tag (16 bytes) automatically to the end of ciphertext.
-    let key = Key::from_slice(key);
-    let nonce = Nonce::from_slice(&nonce);
+    let key: &Key = key.into();
+    let nonce: &Nonce = (&nonce).into();
     let mut ciphertext_with_tag: Vec<u8> = Vec::from(plaintext);
     let cipher = ChaCha20Poly1305::new(key);
     cipher
@@ -32,15 +31,14 @@ pub fn aead_encrypt(
 }
 
 /// ChaCha20Poly1305 AEAD decryption function.
-#[allow(deprecated, reason = "generic_array < v1.0 is deprecated")]
 pub fn aead_decrypt(
     key: &AeadKey,
     ciphertext_with_tag: &[u8],
     nonce: AeadNonce,
     aad: Option<&[u8]>,
 ) -> Result<Vec<u8>, AeadError> {
-    let key = Key::from_slice(key);
-    let nonce = Nonce::from_slice(&nonce);
+    let key: &Key = key.into();
+    let nonce: &Nonce = (&nonce).into();
     let mut plaintext: Vec<u8> = Vec::from(ciphertext_with_tag);
     let cipher = ChaCha20Poly1305::new(key);
     cipher

@@ -27,8 +27,8 @@ use std::str::FromStr;
 #[cfg(feature = "arbitrary")]
 use arbitrary::Arbitrary;
 use ed25519_dalek::Signer as _;
-use rand::RngCore;
-use rand::rngs::OsRng;
+use rand::TryRng;
+use rand::rngs::SysRng;
 use thiserror::Error;
 
 use crate::traits::{Author, ShortFormat};
@@ -62,7 +62,9 @@ impl SigningKey {
         // does exactly this); building it from bytes avoids coupling to the
         // rand_core version ed25519-dalek 3.x binds.
         let mut bytes = [0u8; SIGNING_KEY_LEN];
-        OsRng.fill_bytes(&mut bytes);
+        SysRng
+            .try_fill_bytes(&mut bytes)
+            .expect("operating system random source");
         Self(ed25519_dalek::SigningKey::from_bytes(&bytes))
     }
 

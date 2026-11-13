@@ -2,7 +2,8 @@
 
 use std::sync::Mutex;
 
-use rand_chacha::rand_core::{SeedableRng, TryRngCore};
+use rand::rngs::SysRng;
+use rand_chacha::rand_core::{SeedableRng, TryRng};
 use thiserror::Error;
 
 /// Cryptographically-secure random number generator that uses the ChaCha algorithm.
@@ -14,7 +15,10 @@ pub struct Rng {
 impl Default for Rng {
     fn default() -> Self {
         Self {
-            rng: Mutex::new(rand_chacha::ChaCha20Rng::from_os_rng()),
+            rng: Mutex::new(
+                rand_chacha::ChaCha20Rng::try_from_rng(&mut SysRng)
+                    .expect("operating system random source"),
+            ),
         }
     }
 }

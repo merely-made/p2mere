@@ -5,8 +5,8 @@ use std::fmt::Display;
 use std::hash::Hash as StdHash;
 use std::str::FromStr;
 
-use rand::Rng;
-use rand::rngs::OsRng;
+use rand::rngs::SysRng;
+use rand::{Rng, RngExt, rand_core::UnwrapErr};
 use thiserror::Error;
 
 use crate::traits::ShortFormat;
@@ -30,12 +30,12 @@ pub struct Topic(pub(crate) [u8; TOPIC_LENGTH]);
 
 impl Topic {
     pub fn random() -> Self {
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
         Self::from_rng(&mut rng)
     }
 
     pub fn from_rng<R: Rng>(rng: &mut R) -> Self {
-        Self(rng.r#gen())
+        Self(rng.random())
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, TopicError> {

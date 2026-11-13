@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 //! XChaCha20Poly1305 is a ChaCha20 AEAD variant with an extended 192-bit (24-byte) nonce.
-use chacha20poly1305::{AeadInPlace, Key, KeyInit, XChaCha20Poly1305, XNonce};
+use chacha20poly1305::{AeadInOut, Key, KeyInit, XChaCha20Poly1305, XNonce};
 use thiserror::Error;
 
 /// "Extended" 192-bit nonce.
@@ -11,15 +11,14 @@ pub type XAeadNonce = [u8; 24];
 pub type XAeadKey = [u8; 32];
 
 /// XChaCha20-Poly1305 AEAD encryption function.
-#[allow(deprecated, reason = "generic_array < v1.0 is deprecated")]
 pub fn x_aead_encrypt(
     key: &XAeadKey,
     plaintext: &[u8],
     nonce: XAeadNonce,
     aad: Option<&[u8]>,
 ) -> Result<Vec<u8>, XAeadError> {
-    let key = Key::from_slice(key);
-    let nonce = XNonce::from_slice(&nonce);
+    let key: &Key = key.into();
+    let nonce: &XNonce = (&nonce).into();
     let mut ciphertext: Vec<u8> = Vec::from(plaintext);
 
     let cipher = XChaCha20Poly1305::new(key);
@@ -31,15 +30,14 @@ pub fn x_aead_encrypt(
 }
 
 /// XChaCha20-Poly1305 AEAD decryption function.
-#[allow(deprecated, reason = "generic_array < v1.0 is deprecated")]
 pub fn x_aead_decrypt(
     key: &XAeadKey,
     ciphertext_with_tag: &[u8],
     nonce: XAeadNonce,
     aad: Option<&[u8]>,
 ) -> Result<Vec<u8>, XAeadError> {
-    let key = Key::from_slice(key);
-    let nonce = XNonce::from_slice(&nonce);
+    let key: &Key = key.into();
+    let nonce: &XNonce = (&nonce).into();
     let mut plaintext: Vec<u8> = Vec::from(ciphertext_with_tag);
 
     let cipher = XChaCha20Poly1305::new(key);
