@@ -30,6 +30,7 @@ default = [
   "macros",
 ]
 sqlite = [
+  "dep:async-stream",
   "dep:serde",
   "dep:sqlx",
   "dep:thiserror",
@@ -55,7 +56,7 @@ test_utils = [
 ]
 
 [dependencies]
-async-stream = "0.3.6"
+async-stream = { version = "0.3.6", optional = true }
 futures-util = { workspace = true, features = ["alloc"]}
 p2panda-auth = { workspace = true, default-features = false, features = ["serde"], optional = true }
 p2panda-core = { workspace = true }
