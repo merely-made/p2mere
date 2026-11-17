@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Highlights are marked with a pancake 🥞
 
+## 0.11.1 - 2026-11-17
+
+### Changed
+
+- Store builds enable `async-stream` through the `sqlite` feature. Consumers
+  using store traits without SQLite avoid `async-stream` and its derive macro.
+- All P2mere packages advance together to 0.11.1.
+
+### Fixed
+
+- The device-group space membership test waits for the demotion event before
+  checking read access, allowing earlier queued space events to arrive first.
+- Seeded network test nodes request OS-assigned ports and advertise their bound
+  ports. Other seeded fixtures check port availability before binding, avoiding
+  Windows port exclusion ranges.
+
 ## [0.8.0] - 09/11/2026
 
 ### Added

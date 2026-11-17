@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use std::collections::HashMap;
-use std::net::{Ipv4Addr, Ipv6Addr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, UdpSocket};
 
 use p2panda_core::{Body, Hash, Header, Operation, SeqNum, SigningKey, Topic, VerifyingKey};
 use p2panda_store::logs::LogStore;
@@ -141,14 +141,22 @@ pub fn test_args_from_seed(seed: [u8; 32]) -> ApplicationArguments {
         .with_signing_key(SigningKey::from_bytes(&signing_key_bytes))
         .with_iroh_config(IrohConfig {
             bind_ip_v4: Ipv4Addr::LOCALHOST,
-            bind_port_v4: rng.random_range(49152..65535),
+            bind_port_v4: test_port(Ipv4Addr::LOCALHOST.into(), &mut rng),
             bind_ip_v6: Ipv6Addr::LOCALHOST,
-            bind_port_v6: rng.random_range(49152..65535),
+            bind_port_v6: test_port(Ipv6Addr::LOCALHOST.into(), &mut rng),
             ..Default::default()
         })
         .with_rng(rng)
         .with_mdns_mode(MdnsDiscoveryMode::Passive)
         .build()
+}
+
+fn test_port(address: IpAddr, rng: &mut ChaCha20Rng) -> u16 {
+    let start = rng.random_range(49152..65535);
+    (start..65535)
+        .chain(49152..start)
+        .find(|&port| UdpSocket::bind((address, port)).is_ok())
+        .expect("test endpoint needs an available UDP port")
 }
 
 #[test]
@@ -172,7 +180,10 @@ pub struct TestNode {
 
 impl TestNode {
     pub async fn spawn(seed: [u8; 32], node_info: Option<NodeInfo>) -> Self {
-        Self::spawn_with_args(test_args_from_seed(seed), node_info).await
+        let mut args = test_args_from_seed(seed);
+        args.iroh_config.bind_port_v4 = 0;
+        args.iroh_config.bind_port_v6 = 0;
+        Self::spawn_with_args(args, node_info).await
     }
 
     pub async fn spawn_with_args(
@@ -201,6 +212,14 @@ impl TestNode {
             .spawn()
             .await
             .unwrap();
+
+        for socket in endpoint.endpoint().await.unwrap().bound_sockets() {
+            if socket.is_ipv4() {
+                args.iroh_config.bind_port_v4 = socket.port();
+            } else {
+                args.iroh_config.bind_port_v6 = socket.port();
+            }
+        }
 
         let mdns = MdnsDiscovery::builder(address_book.clone(), endpoint.clone())
             .mode(args.mdns_mode.clone())

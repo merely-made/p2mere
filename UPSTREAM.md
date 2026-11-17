@@ -196,3 +196,19 @@ vectors and ChaCha20-Poly1305, XChaCha20-Poly1305 and ChaCha20Rng outputs
 recorded with the previous releases, and all pass on both, so peers and
 stored data on 0.10 agree with 0.11. Consumers move their registry bound from
 "0.10" to "0.11" once it is published.
+
+## Release 0.11.1 (2026-11-17)
+
+Family change `9bc09242` makes `p2mere-store`'s `async-stream` dependency optional
+and enables it with `sqlite`, the only backend that uses `try_stream!`. The
+default SQLite configuration retains the dependency. Consumers that disable
+SQLite avoid `async-stream` and `async-stream-impl`. All eleven published
+packages advance together. Existing `0.11` consumer requirements accept the
+patch release.
+
+Release qualification also corrected the device-group membership integration
+test to wait for `SpaceEvent::Demoted` before checking read access. An earlier
+queued space event could still report write access after promotion.
+The network test node helper also requests ephemeral ports and records the
+bound ports for discovery, avoiding seeded values in Windows port exclusions.
+Other seeded endpoint fixtures check available UDP ports before choosing one.

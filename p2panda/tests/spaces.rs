@@ -368,7 +368,12 @@ mod spaces_api {
         );
 
         while let Some(event) = panda_rx.next().await {
-            if let StreamEvent::Space { members, .. } = event {
+            if let StreamEvent::Space {
+                members,
+                inner: SpaceEvent::Demoted { .. },
+                ..
+            } = event
+            {
                 assert_eq!(members.len(), 3);
                 assert_eq!(
                     members.get(&penguin_laptop.id()).unwrap(),
@@ -391,7 +396,12 @@ mod spaces_api {
 
         // Penguin laptop also receives the promote and demote.
         while let Some(event) = penguin_laptop_rx.next().await {
-            if let StreamEvent::Space { members, .. } = event {
+            if let StreamEvent::Space {
+                members,
+                inner: SpaceEvent::Demoted { .. },
+                ..
+            } = event
+            {
                 assert_eq!(members.len(), 3);
                 assert_eq!(
                     members.get(&penguin_laptop.id()).unwrap(),
