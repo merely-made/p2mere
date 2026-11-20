@@ -1,0 +1,21 @@
+name: P2mere release qualification
+on:
+  push:
+    branches: [qualify/p2mere-0.12.1]
+permissions:
+  contents: read
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CARGO_PROFILE_DEV_DEBUG: '0'
+      CARGO_PROFILE_TEST_DEBUG: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install 1.99.1 --profile minimal
+      - run: cargo +1.99.1 test --workspace --all-features --no-fail-fast
+      - run: cargo +1.99.1 check --no-default-features -p p2mere-spaces -p p2mere-net --features p2mere-net/address_book
+      - run: cargo +1.99.1 publish --workspace --exclude p2panda-fuzz --dry-run
