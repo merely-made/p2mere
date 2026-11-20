@@ -23,6 +23,12 @@ breaking changes to the API of `p2panda-net`:
 
 - net: Update iroh to v1.5.0 [#1614](https://github.com/p2panda/p2panda/pull/1614)
 
+### Fixed
+
+- Sync shutdown joins each topic actor before returning, including when multiple
+  handles shut the same instance down concurrently. Durable stores can be
+  reopened as soon as shutdown completes.
+
 ### Added
 
 - node: Define `EventDelivery` traits and types [#1608](https://github.com/p2panda/p2panda/pull/1608)

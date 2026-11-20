@@ -188,12 +188,15 @@ async fn shutdown_releases_topic_manager_store_immediately() {
         let handle = log_sync.stream(Topic::random(), true).await.unwrap();
         drop(handle);
 
-        log_sync.shutdown().await.unwrap();
-        assert_eq!(
-            store.live_handles(),
-            1,
-            "round {round}: a store handle outlived shutdown"
-        );
+        let shutdown = |sync: LogSync<ReleaseTrackedStore, u64, ()>| async {
+            sync.shutdown().await.unwrap();
+            assert_eq!(
+                store.live_handles(),
+                1,
+                "round {round}: a store handle outlived shutdown"
+            );
+        };
+        tokio::join!(shutdown(log_sync.clone()), shutdown(log_sync));
     }
 }
 

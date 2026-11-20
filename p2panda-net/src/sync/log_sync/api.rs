@@ -116,19 +116,21 @@ where
     /// This stops the shared session even when another `LogSync` clone exists;
     /// it is an authority-level close, not a per-handle detach.
     pub async fn shutdown(self) -> Result<(), LogSyncError<E>> {
-        let (actor_ref, actor_task) = {
-            let mut inner = self.inner.write().await;
-            (inner.actor_ref.clone(), inner.actor_task.take())
+        let mut inner = self.inner.write().await;
+        let Inner {
+            actor_ref,
+            actor_task,
+        } = &mut *inner;
+        let Some(task) = actor_task.as_mut() else {
+            return Ok(());
         };
         let stop_error = actor_ref
             .stop_and_wait(None, None)
             .await
             .err()
             .map(|error| error.to_string());
-        let task_error = match actor_task {
-            Some(actor_task) => actor_task.await.err().map(|error| error.to_string()),
-            None => None,
-        };
+        let task_error = task.await.err().map(|error| error.to_string());
+        actor_task.take();
         if let Some(error) = stop_error {
             return Err(LogSyncError::ActorStop(error));
         }

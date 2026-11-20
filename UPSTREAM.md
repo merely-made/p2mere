@@ -242,3 +242,6 @@ p2mere packages move together to 0.12.0.
   package-version edits in `fbe23631` use the fork's names and version.
   The remaining upstream changes, including dependency cleanup and advisory
   configuration, are included.
+- Release qualification exposed a fork shutdown race. Both topic close and
+  manager shutdown now join the topic actor task so the store has been dropped
+  when shutdown returns, including for concurrent callers.

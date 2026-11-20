@@ -78,9 +78,33 @@ pub enum ToSyncManager<M, E> {
 /// Mapping of topic to the receiver channel from the associated sync manager.
 type TopicManagerReceivers<E> = HashMap<Topic, broadcast::Receiver<FromSync<E>>>;
 
+struct RunningTopic<T> {
+    actor: ActorRef<ToTopicManager<T>>,
+    live_mode: bool,
+    task: JoinHandle<()>,
+}
+
+impl<T: Send + 'static> RunningTopic<T> {
+    async fn close(self) -> Result<(), ActorProcessingErr> {
+        let (reply, closed) = oneshot::channel();
+        if self
+            .actor
+            .send_message(ToTopicManager::CloseAll(reply))
+            .is_ok()
+        {
+            let _ = closed.await;
+        }
+        // The drain notification can precede destruction of the actor's state.
+        // Join the task itself before allowing the backend to be reopened.
+        let _ = self.actor.drain();
+        self.task.await?;
+        Ok(())
+    }
+}
+
 /// Mapping of the topic to the regarding manager.
 struct TopicManagers<T> {
-    topic_manager_map: HashMap<Topic, (ActorRef<ToTopicManager<T>>, IsLiveModeEnabled)>,
+    topic_manager_map: HashMap<Topic, RunningTopic<T>>,
     actor_topic_map: HashMap<ActorId, Topic>,
 }
 
@@ -121,8 +145,10 @@ where
     M: SyncManagerTrait<Topic> + Send + 'static,
 {
     /// Drop all internal state associated with the given topic.
-    fn drop_topic_state(&mut self, topic: &Topic) {
-        self.topic_managers.topic_manager_map.remove(topic);
+    async fn drop_topic_state(&mut self, topic: &Topic) -> Result<(), ActorProcessingErr> {
+        if let Some(manager) = self.topic_managers.topic_manager_map.remove(topic) {
+            manager.task.await?;
+        }
         self.sync_receivers.remove(topic);
 
         // Dropping the gossip handle will unsubscribe us from the gossip topic and remove it from
@@ -131,6 +157,7 @@ where
             // Close task running HyParView membership logic.
             handle.abort();
         }
+        Ok(())
     }
 
     /// Join gossip overlay to use HyParView membership algorithm for peer sampling.
@@ -285,14 +312,11 @@ where
         // drain. Topic managers own the protocol store, so returning before
         // their post-stop hooks finish leaves durable backends locked after a
         // top-level LogSync shutdown.
-        for (_, (actor, _)) in state.topic_managers.topic_manager_map.drain() {
-            let (reply, reply_rx) = oneshot::channel();
-            actor.send_message(ToTopicManager::CloseAll(reply))?;
-            let _ = reply_rx.await;
-            actor.drain_and_wait(None).await?;
+        let mut result = Ok(());
+        for (_, manager) in state.topic_managers.topic_manager_map.drain() {
+            result = result.and(manager.close().await);
         }
-
-        Ok(())
+        result
     }
 
     async fn handle(
@@ -321,10 +345,8 @@ where
             }
             ToSyncManager::Create(topic, live_mode, reply) => {
                 // Check if we're already subscribed.
-                if let Some((sync_manager_ref, _)) =
-                    state.topic_managers.topic_manager_map.get(&topic)
-                {
-                    let _ = reply.send(sync_manager_ref.clone());
+                if let Some(manager) = state.topic_managers.topic_manager_map.get(&topic) {
+                    let _ = reply.send(manager.actor.clone());
                     return Ok(());
                 }
 
@@ -344,7 +366,7 @@ where
                 // TODO: Pass the from_sync_tx sender into the sync manager actor.
                 //
                 // Spawn a sync manager for this topic.
-                let (sync_manager_ref, _) = TopicManager::<M>::spawn_linked(
+                let (sync_manager_ref, task) = TopicManager::<M>::spawn_linked(
                     None,
                     (
                         state.protocol_id.clone(),
@@ -358,10 +380,14 @@ where
                 )
                 .await?;
 
-                state
-                    .topic_managers
-                    .topic_manager_map
-                    .insert(topic, (sync_manager_ref.clone(), live_mode));
+                state.topic_managers.topic_manager_map.insert(
+                    topic,
+                    RunningTopic {
+                        actor: sync_manager_ref.clone(),
+                        live_mode,
+                        task,
+                    },
+                );
 
                 state
                     .topic_managers
@@ -385,29 +411,17 @@ where
             ToSyncManager::Close(topic, reply) => {
                 debug!(topic = topic.fmt_short(), "close sync in manager");
 
-                // Close all sync sessions running over this topic.
-                if let Some((actor, _)) = state.topic_managers.topic_manager_map.get(&topic) {
-                    let (reply, reply_rx) = oneshot::channel();
-                    actor.send_message(ToTopicManager::CloseAll(reply))?;
-                    let _ = reply_rx.await;
-                }
-
-                // Drop the sync manager state for this topic.
-                if let Some((sync_manager, _)) =
-                    state.topic_managers.topic_manager_map.remove(&topic)
-                {
+                if let Some(manager) = state.topic_managers.topic_manager_map.remove(&topic) {
                     state
                         .topic_managers
                         .actor_topic_map
-                        .remove(&sync_manager.get_id());
-
-                    // Finish processing all messages in the manager's queue and then kill it.
-                    sync_manager.drain_and_wait(None).await?;
+                        .remove(&manager.actor.get_id());
+                    manager.close().await?;
                 }
 
                 // Drop all channels and handles associated with the topic. The removed gossip
                 // overlay will automatically remove the entry from the address book.
-                state.drop_topic_state(&topic);
+                state.drop_topic_state(&topic).await?;
 
                 // Inform the caller that termination is complete for sync sessions over this
                 // topic.
@@ -421,44 +435,38 @@ where
                     return Ok(());
                 }
 
-                if let Some((sync_manager_actor, live_mode)) =
-                    state.topic_managers.topic_manager_map.get(&topic)
-                {
+                if let Some(manager) = state.topic_managers.topic_manager_map.get(&topic) {
                     debug!(
                         topic = topic.fmt_short(),
                         remote_node_id = remote_node_id.fmt_short(),
                         "initiate sync session",
                     );
 
-                    sync_manager_actor.send_message(ToTopicManager::Initiate {
+                    manager.actor.send_message(ToTopicManager::Initiate {
                         node_id: remote_node_id,
                         topic,
-                        live_mode: *live_mode,
+                        live_mode: manager.live_mode,
                     })?;
                 }
             }
             ToSyncManager::Accept(node_id, topic, connection) => {
-                if let Some((sync_manager_actor, live_mode)) =
-                    state.topic_managers.topic_manager_map.get(&topic)
-                {
+                if let Some(manager) = state.topic_managers.topic_manager_map.get(&topic) {
                     debug!(
                         topic = topic.fmt_short(),
                         node_id = node_id.fmt_short(),
                         "accept sync session",
                     );
 
-                    sync_manager_actor.send_message(ToTopicManager::Accept {
+                    manager.actor.send_message(ToTopicManager::Accept {
                         node_id,
                         topic,
-                        live_mode: *live_mode,
+                        live_mode: manager.live_mode,
                         connection,
                     })?;
                 }
             }
             ToSyncManager::EndSync(topic, node_id) => {
-                if let Some((sync_manager_actor, _)) =
-                    state.topic_managers.topic_manager_map.get(&topic)
-                {
+                if let Some(manager) = state.topic_managers.topic_manager_map.get(&topic) {
                     debug!(
                         topic = topic.fmt_short(),
                         node_id = node_id.fmt_short(),
@@ -467,7 +475,9 @@ where
 
                     // We don't wish to await termination so we ignore / drop the receiver.
                     let (reply, _reply_rx) = oneshot::channel();
-                    sync_manager_actor.send_message(ToTopicManager::Close { node_id, reply })?;
+                    manager
+                        .actor
+                        .send_message(ToTopicManager::Close { node_id, reply })?;
                 }
             }
         }
@@ -477,7 +487,7 @@ where
 
     async fn handle_supervisor_evt(
         &self,
-        myself: ActorRef<Self::Msg>,
+        _myself: ActorRef<Self::Msg>,
         message: SupervisionEvent,
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
@@ -502,7 +512,7 @@ where
                     );
 
                     // Drop all state associated with the terminated sync manager.
-                    state.drop_topic_state(&topic);
+                    state.drop_topic_state(&topic).await?;
                 }
             }
             SupervisionEvent::ActorFailed(actor, panic_msg) => {
@@ -517,9 +527,7 @@ where
                         "sync manager failed: {panic_msg:#?}",
                     );
 
-                    let (reply, reply_rx) = oneshot::channel();
-                    myself.send_message(ToSyncManager::Close(topic, reply))?;
-                    let _ = reply_rx.await;
+                    state.drop_topic_state(&topic).await?;
                 }
             }
             _ => (),
