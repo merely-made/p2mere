@@ -317,7 +317,7 @@ where
         // Construct space message and sign it in the forge (F)
         let dependencies: Vec<OperationId> = space_y.encryption_y.orderer.heads().to_vec();
         let space_message = {
-            let args = SpacesArgs::SpaceMembership {
+            let args = SpacesArgs::KeyAgreement {
                 space_id: space_y.space_id,
                 group_id: space_y.group_id,
                 space_dependencies: dependencies.clone(),
@@ -434,12 +434,18 @@ where
                     &next_secret_members,
                 );
 
+                // Buffered application messages which might get released when we're welcomed.
+                let operation_ids = space_y.encryption_y.orderer.queued_operation_ids();
+
                 // Process encryption message.
                 let (encryption_y, encryption_output) =
                     EncryptionGroup::receive(space_y.encryption_y, &encryption_message)?;
 
                 space_y.encryption_y = encryption_y;
-                let events = encryption_output_to_space_events(&space_id, encryption_output);
+
+                let events =
+                    encryption_output_to_space_events(&space_id, operation_ids, encryption_output);
+
                 application_events.extend(events);
             };
 
@@ -597,7 +603,11 @@ where
             .orderer
             .add_dependency(encryption_message.id(), &message.space_dependencies);
 
-        let mut events = encryption_output_to_space_events(&space_y.space_id, encryption_output);
+        let mut events = encryption_output_to_space_events(
+            &space_y.space_id,
+            vec![encryption_message.id()],
+            encryption_output,
+        );
 
         // Filter out application events if the author has concurrently lost their write access.
         //
@@ -747,7 +757,7 @@ where
             space_y.groups_y =
                 AuthGroup::<C>::process(space_y.groups_y, &SpacesMessage::auth(&group_message))?;
 
-            let args = SpacesArgs::SpaceMembership {
+            let args = SpacesArgs::KeyAgreement {
                 space_id: space_y.space_id,
                 group_id: space_y.group_id,
                 auth_message_id: group_message.hash(),
@@ -897,6 +907,7 @@ where
 
         let event = Event::Application {
             space_id: space_y.space_id,
+            operation_id: message.hash(),
             data: plaintext.to_owned(),
         };
 

@@ -1,6 +1,6 @@
 [package]
 name = "p2mere-auth"
-version = "0.11.1"
+version = "0.12.0"
 edition = "2024"
 authors = [
   "adz <x12@adz.garden>",
@@ -27,8 +27,6 @@ workspace = true
 [features]
 default = []
 test_utils = [
-  "dep:rand",
-  "dep:tokio",
   "dep:tracing-subscriber",
   "serde",
   "p2panda-core/test_utils"
@@ -43,10 +41,8 @@ test = [
 [dependencies]
 p2panda-core = { workspace = true, default-features = true }
 petgraph = { version = "0.8.3", features = ["serde-1"] }
-rand = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"], optional = true }
 thiserror = { workspace = true }
-tokio = { workspace = true, default-features = true, features = ["sync", "signal"], optional = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"], optional = true }
 

@@ -1696,15 +1696,15 @@ mod database {
     use crate::{SecretData, Swarm};
 
     #[tokio::test]
-    async fn pipeline_blocked_by_log_ranges_query_regression()
-    -> Result<(), Box<dyn std::error::Error>> {
+    async fn pipeline_blocked_by_log_ranges_query_regression() {
         // This test reproduces the conditions which caused the pipeline to block due to
         // `LogStore::log_entries` (called within `log_ranges`) keeping a connection open for the
-        // duration of it's streaming query. Operations are processed one at a time in the
-        // pipeline, and during processing new database connections are opened. Setting
-        // max_connections to 1 resulted in the pipeline blocking forever.
+        // duration of it's streaming query. Operations are processed one at a time in the pipeline,
+        // and during processing new database connections are opened. Setting max_connections to 1
+        // resulted in the pipeline blocking forever.
         //
         // https://github.com/p2panda/p2panda/issues/1512
+
         async fn spawn_node(swarm: &Swarm) -> Node {
             let db = SqliteStoreBuilder::memory()
                 // Set max_connections to 1 in order to reproduce blocking conditions.
@@ -1724,7 +1724,7 @@ mod database {
         let panda = spawn_node(&swarm).await;
 
         // Panda creates and subscribes to a space.
-        let (space, _panda_rx) = panda.create_space::<SecretData>().await?;
+        let (space, _panda_rx) = panda.create_space::<SecretData>().await.unwrap();
         let topic = space.id();
 
         // Panda publishes some messages to all members.
@@ -1736,7 +1736,7 @@ mod database {
             };
             messages.push(message.clone());
 
-            let ready = space.publish(message).await?;
+            let ready = space.publish(message).await.unwrap();
             assert!(ready.await.is_ok());
         }
 
@@ -1747,22 +1747,23 @@ mod database {
         // connection issue was present.
         let (_space, mut panda_rx) = panda
             .space_from::<SecretData>(topic, StreamFrom::Start)
-            .await?;
+            .await
+            .unwrap();
 
-        // panda receives and processes all messages.
+        // Panda receives and processes all messages.
         loop {
             let Some(event) = panda_rx.next().await else {
                 panic!("unexpected stream closure");
             };
+
             let StreamEvent::Processed { operation, .. } = event else {
                 continue;
             };
+
             if messages.last().unwrap() == operation.message() {
                 break;
             };
         }
-
-        Ok(())
     }
 }
 
@@ -1830,25 +1831,37 @@ mod messages {
 
         // We expect penguin to receive messages from before and after they were a member in the
         // order they were published.
-        let mut messages = Vec::new();
+        let mut operations = Vec::new();
         let expected_message_count = 3;
         loop {
             let Some(event) = penguin_rx.next().await else {
                 panic!("unexpected stream closure");
             };
+
             let StreamEvent::Processed { operation, .. } = event else {
                 continue;
             };
 
-            messages.push(operation.message().clone());
+            operations.push(operation.clone());
 
-            println!("message received: {:?}", operation.message());
-
-            // Test blocks here as only message 1 & 3 are received.
-            if messages.len() == expected_message_count {
+            if operations.len() == expected_message_count {
                 break;
             }
         }
+
+        // Make sure each operation has a different id.
+        let mut seen_operation_ids = Vec::new();
+        for op in &operations {
+            if seen_operation_ids.contains(&op.id()) {
+                panic!("ids need to be unique");
+            }
+
+            seen_operation_ids.push(op.id());
+            assert_eq!(op.author(), panda.id());
+        }
+
+        let messages: Vec<_> = operations.iter().map(|op| op.message().clone()).collect();
+        assert_eq!(messages, vec![message_01, message_02, message_03]);
 
         Ok(())
     }

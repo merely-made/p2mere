@@ -212,3 +212,33 @@ queued space event could still report write access after promotion.
 The network test node helper also requests ephemeral ports and records the
 bound ports for discovery, avoiding seeded values in Windows port exclusions.
 Other seeded endpoint fixtures check available UDP ports before choosing one.
+
+## Intake 2026-11-19 (version 0.12.0)
+
+Based on p2mere 0.11.1 (`1ef69afa`). The merge takes the 32 upstream
+commits in `c7cac9af..6d2379a4e8845732077aa2588b4e972fe4d048f5`,
+including v0.8.1 (`fbe23631`) and subsequent mainline changes. All eleven
+p2mere packages move together to 0.12.0.
+
+- Node and spaces. Buffered application messages carry the original operation
+  ID. The node exposes group and space error types and adds event-delivery
+  traits. The `SpacesArgs::SpaceMembership` variant is now `KeyAgreement`.
+  The high-level node writes ciphertext and member key bundles in operation
+  bodies and reads them back from those bodies. Its previous space headers
+  carried those values inline. Deployments using the high-level spaces API
+  need to qualify replay of existing data and coordinate peer upgrades before
+  adopting this format. This intake includes no legacy space-log migration.
+- Network and sync. The sync manager now drops the session whose sender is
+  missing. The iroh requirement moves to 1.5 and iroh-gossip to 0.103.
+  The public gossip configuration types are now `MembershipConfig` and
+  `BroadcastConfig` (formerly `HyParViewConfig` and `PlumTreeConfig`).
+- Storage. SQLx moves to 0.9.1 and in-memory SQLite uses the builder's
+  connection-count defaults. The intake changes no SQL migration files.
+  The fork retains its optional SQLite backend and SQLite-only async-stream
+  dependency, store-agnostic address book, per-instance sync protocol IDs,
+  external ALPN support and RustCrypto updates.
+- Intake exceptions. The fork removed its GitHub workflows in `6241bd61`,
+  so their edits in `e16287eb` and `2e65f3ee` are skipped. The upstream
+  package-version edits in `fbe23631` use the fork's names and version.
+  The remaining upstream changes, including dependency cleanup and advisory
+  configuration, are included.
