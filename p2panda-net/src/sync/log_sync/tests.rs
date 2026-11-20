@@ -257,6 +257,43 @@ async fn session_event(
 }
 
 #[tokio::test]
+async fn shutdown_drains_live_sessions_and_forwards_their_final_event() {
+    let topic: Topic = [93; 32].into();
+    let mut bob = TestNode::spawn([92; 32], None).await;
+    let mut alice = TestNode::spawn([91; 32], Some(bob.node_info())).await;
+    bob.address_book
+        .insert_node_info(alice.node_info())
+        .await
+        .unwrap();
+
+    let bob_handle = bob.log_sync.stream(topic, true).await.unwrap();
+    let alice_handle = alice.log_sync.stream(topic, true).await.unwrap();
+    let mut events = alice_handle.subscribe().await.unwrap();
+    alice_handle.initiate_session(bob.node_id());
+    loop {
+        if matches!(
+            session_event(&mut events, 0).await.unwrap().event,
+            Event::LiveModeStarted
+        ) {
+            break;
+        }
+    }
+
+    tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        alice.log_sync.shutdown().await.unwrap();
+        bob.log_sync.shutdown().await.unwrap();
+    })
+    .await
+    .expect("two live peers must shut down without exhausting the poller timeout");
+
+    assert!(matches!(
+        session_event(&mut events, 0).await.unwrap().event,
+        Event::SessionFinished { .. }
+    ));
+    drop(bob_handle);
+}
+
+#[tokio::test]
 async fn e2e_log_sync() {
     setup_logging();
 

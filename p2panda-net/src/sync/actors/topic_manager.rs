@@ -14,6 +14,7 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::pin::Pin;
 
+use futures_util::future::join_all;
 use futures_util::{Sink, SinkExt};
 use iroh::endpoint::Connection;
 use p2panda_core::Topic;
@@ -165,19 +166,26 @@ where
 
     async fn post_stop(
         &self,
-        _myself: ActorRef<Self::Msg>,
+        myself: ActorRef<Self::Msg>,
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
-        // With no sync session actors left nothing can push new events onto the poller's stream,
-        // so tell it to forward whatever is already buffered and terminate. Without this the
-        // poller blocks on a stream that only ends once our state is dropped, which happens after
-        // this hook returns, so the drain below always ran out its full timeout.
-        //
-        // While sessions are still running we leave the poller alone and let the timeout bound the
-        // drain, as before.
-        if state.actor_session_id_map.is_empty()
-            && let Some(finish) = state.sync_poller_finish.take()
-        {
+        // CloseAll has signalled each protocol. Leave the poller running until its producers
+        // finish, so their final events reach subscribers. Session actors each handle a single
+        // protocol invocation and may still be idle in their mailbox after it returns.
+        let sessions = myself
+            .get_children()
+            .into_iter()
+            .filter(|child| state.actor_session_id_map.contains_key(&child.get_id()));
+        join_all(sessions.map(|session| async move {
+            let _ = session.drain();
+            if session.wait(Some(Duration::from_secs(5))).await.is_err() {
+                session.kill();
+                let _ = session.wait(None).await;
+            }
+        }))
+        .await;
+
+        if let Some(finish) = state.sync_poller_finish.take() {
             let _ = finish.send(());
         }
 

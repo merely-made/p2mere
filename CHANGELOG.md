@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Highlights are marked with a pancake 🥞
 
+## 0.12.1 - 2026-11-20
+
+### Fixed
+
+- Live sync shutdown waits for session actors to finish and forwards their final
+  events before releasing the topic store. Healthy peers can close sequentially
+  without spending five seconds per peer in the event poller.
+
 ## 0.12.0 - 2026-11-19
 
 This intake includes upstream 0.8.1 and the changes through `6d2379a4`.

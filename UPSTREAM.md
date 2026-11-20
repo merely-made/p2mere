@@ -245,3 +245,9 @@ p2mere packages move together to 0.12.0.
 - Release qualification exposed a fork shutdown race. Both topic close and
   manager shutdown now join the topic actor task so the store has been dropped
   when shutdown returns, including for concurrent callers.
+
+## Patch 2026-11-20 (version 0.12.1)
+
+Fork-local lifecycle fix on the 0.12.0 upstream base. Close and join the live
+session actors before finishing the topic event poller. This preserves final
+session events and the store-release guarantee for concurrent shutdown callers.
